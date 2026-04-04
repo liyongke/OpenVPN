@@ -26,6 +26,7 @@ Now configured for **OpenVPN dual transport on port 443**:
 - Pins DNS to `1.1.1.1` + `8.8.8.8` while connected.
 - Restores your previous macOS DNS settings on disconnect.
 - Adds temporary bypass host routes for common WeChat/QQ domains via local gateway while connected.
+- Uses short DNS timeouts for bypass-route lookups so `connect` will not hang if DNS is unstable.
 
 > **Tip:** add `alias vpn='/Users/ryan/Workspace/OpenVPN_deployment/vpn.sh'` to `~/.zshrc` to use `vpn connect` from anywhere.
 

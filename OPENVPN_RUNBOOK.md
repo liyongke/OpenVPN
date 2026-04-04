@@ -149,6 +149,7 @@ Current helper behavior on macOS:
 - Pins DNS to `1.1.1.1` and `8.8.8.8` after successful connect.
 - Restores the previous DNS configuration on disconnect.
 - Adds temporary bypass host routes for common WeChat/QQ domains via the local default gateway while VPN is up.
+- Uses short DNS timeouts for bypass-route lookups, so connect does not block when DNS is flaky.
 
 ### 6.1 One-time setup
 
