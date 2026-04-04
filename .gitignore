@@ -1,0 +1,24 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+*.tfplan
+tfplan
+tfplan_*
+
+# OpenVPN secrets and generated client profiles
+*.pem
+*.key
+*.ovpn
+*.ovpn.bak
+
+# Local runtime artifacts
+*.log
+*.pid
+
+# Archives and local bundles
+*.zip
+
+# macOS
+.DS_Store
