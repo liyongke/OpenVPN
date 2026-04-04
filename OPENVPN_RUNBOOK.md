@@ -168,7 +168,8 @@ echo "alias vpn='$(pwd)/vpn.sh'" >> ~/.zshrc && source ~/.zshrc
 
 | Command | What it does |
 |---|---|
-| `./vpn.sh connect` | Start VPN, wait for handshake, print public IP |
+| `./vpn.sh connect` | Start VPN (TCP default), wait for handshake, print public IP |
+| `./vpn.sh connect udp` | Start VPN in UDP mode |
 | `./vpn.sh disconnect` | Kill VPN process, show real IP |
 | `./vpn.sh toggle` | Connect if off, disconnect if on |
 | `./vpn.sh status` | Show connected/disconnected state + current public IP |
@@ -318,6 +319,24 @@ dhcp-option DNS 1.1.1.1
 tun-mtu 1500
 mssfix 1400
 ```
+
+---
+
+### Issue G — VPN connects but all tunnel traffic times out (TCP/UDP)
+
+**Symptom:** Client shows `Initialization Sequence Completed`, routes are installed, but DNS/HTTPS through tunnel time out.
+
+**Root cause:** Server NAT rule was bound to the wrong outbound interface (hardcoded `eth0` while actual default interface differed).
+
+**Resolution:** Auto-detect outbound interface and apply MASQUERADE on that interface.
+
+```bash
+IFACE="$(ip route show default | awk '{print $5; exit}')"
+sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE || \
+  sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE
+```
+
+This logic is now built into `openvpn_setup.sh` and `setup_openvpn_server.sh`.
 
 ---
 

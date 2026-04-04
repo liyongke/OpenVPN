@@ -10,9 +10,9 @@ Now configured for **OpenVPN dual transport on port 443**:
 ## Quick Start
 
 ```bash
-./vpn.sh connect      # start VPN (UDP default)
-./vpn.sh connect tcp  # start VPN over TCP fallback
-./vpn.sh on udp       # alias of connect
+./vpn.sh connect      # start VPN (TCP default)
+./vpn.sh connect udp  # optional UDP mode
+./vpn.sh on tcp       # alias of connect
 ./vpn.sh disconnect   # stop VPN
 ./vpn.sh toggle       # flip state (on → off, off → on)
 ./vpn.sh status       # show state + current public IP
@@ -27,6 +27,9 @@ Now configured for **OpenVPN dual transport on port 443**:
 - Restores your previous macOS DNS settings on disconnect.
 - Adds temporary bypass host routes for common WeChat/QQ domains via local gateway while connected.
 - Uses short DNS timeouts for bypass-route lookups so `connect` will not hang if DNS is unstable.
+
+Default protocol note:
+- `vpn.sh connect` now defaults to TCP for better reliability on restrictive networks.
 
 > **Tip:** add `alias vpn='/Users/ryan/Workspace/OpenVPN_deployment/vpn.sh'` to `~/.zshrc` to use `vpn connect` from anywhere.
 
@@ -63,6 +66,14 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 | `main.tf` | Terraform EC2 + security-group definition |
 | `variables.tf` / `outputs.tf` | Terraform vars and outputs |
 | `OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
+
+---
+
+## Server NAT Note
+
+`openvpn_setup.sh` and `setup_openvpn_server.sh` now auto-detect the server's outbound interface for NAT rules instead of hardcoding `eth0`.
+
+This prevents a common EC2 issue where VPN connects successfully but tunnel traffic has no internet egress because the instance uses a different interface name (for example `ens5`).
 
 ---
 

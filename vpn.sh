@@ -13,7 +13,7 @@ PID_FILE="/tmp/openvpn-client.pid"
 LOG_FILE="/tmp/openvpn-client.log"
 DNS_BACKUP_FILE="/tmp/vpn-sh-dns-backup"
 BYPASS_ROUTE_FILE="/tmp/vpn-sh-bypass-routes"
-DEFAULT_PROTOCOL="udp"
+DEFAULT_PROTOCOL="tcp"
 
 VPN_DNS_SERVERS=("1.1.1.1" "8.8.8.8")
 APP_BYPASS_DOMAINS=(
@@ -590,7 +590,7 @@ cmd_speed() {
 cmd_help() {
   echo -e "${BOLD}Usage:${RESET} $(basename "$0") {connect|on|disconnect|off|down|toggle|status|log|sync|speed} [udp|tcp]"
   echo ""
-  echo "  connect/on [udp|tcp]       Start the VPN (default: udp)"
+  echo "  connect/on [udp|tcp]       Start the VPN (default: tcp)"
   echo "  disconnect/off/down        Stop the VPN"
   echo "  toggle                     Connect if off, disconnect if on"
   echo "  status                     Show connection state + public IP"

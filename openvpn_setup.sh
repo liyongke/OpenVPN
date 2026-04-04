@@ -112,8 +112,14 @@ sudo sysctl -w net.ipv4.ip_forward=1 >/dev/null
 sudo sed -i '/^net.ipv4.ip_forward=/d' /etc/sysctl.conf
 echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf >/dev/null
 
-sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE 2>/dev/null || \
-  sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
+IFACE="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
+if [[ -z "$IFACE" ]]; then
+  IFACE="eth0"
+fi
+echo "Using outbound interface for NAT: ${IFACE}"
+
+sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE 2>/dev/null || \
+  sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE
 sudo iptables -C FORWARD -i tun0 -j ACCEPT 2>/dev/null || \
   sudo iptables -A FORWARD -i tun0 -j ACCEPT
 sudo iptables -C FORWARD -o tun0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \

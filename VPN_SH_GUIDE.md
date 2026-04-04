@@ -24,8 +24,8 @@ chmod +x ./vpn.sh
 ## Core Usage
 
 ~~~bash
-./vpn.sh connect        # connect with UDP (default)
-./vpn.sh connect tcp    # connect with TCP fallback
+./vpn.sh connect        # connect with TCP (default)
+./vpn.sh connect udp    # optional UDP mode
 ./vpn.sh off            # disconnect
 ./vpn.sh status         # show state + public IP
 ./vpn.sh log            # tail OpenVPN log
@@ -47,7 +47,7 @@ chmod +x ./vpn.sh
 
 ## Notes
 
-- `connect` defaults to UDP.
+- `connect` defaults to TCP.
 - `connect` now pins macOS DNS to `1.1.1.1` + `8.8.8.8` while VPN is up.
 - `disconnect` restores your original macOS DNS settings automatically.
 - `connect` also adds temporary host routes for common WeChat/QQ domains via local gateway, then removes them on disconnect.
