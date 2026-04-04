@@ -48,6 +48,9 @@ chmod +x ./vpn.sh
 ## Notes
 
 - `connect` defaults to UDP.
+- `connect` now pins macOS DNS to `1.1.1.1` + `8.8.8.8` while VPN is up.
+- `disconnect` restores your original macOS DNS settings automatically.
+- `connect` also adds temporary host routes for common WeChat/QQ domains via local gateway, then removes them on disconnect.
 - `speed udp` and `speed tcp` temporarily switch protocol if needed, then restore your previous VPN state.
 - If Terraform is available, `connect`/`sync` auto-updates profile endpoint IP.
 

@@ -145,6 +145,11 @@ verb 3
 
 `vpn.sh` wraps all OpenVPN operations into simple subcommands with colour output and auto-verification.
 
+Current helper behavior on macOS:
+- Pins DNS to `1.1.1.1` and `8.8.8.8` after successful connect.
+- Restores the previous DNS configuration on disconnect.
+- Adds temporary bypass host routes for common WeChat/QQ domains via the local default gateway while VPN is up.
+
 ### 6.1 One-time setup
 
 ```bash
@@ -175,6 +180,7 @@ Aliases: `on`/`up` for connect, `off`/`down` for disconnect, `s` for status, `l`
 ```
 Connecting…
 ...............
+DNS pinned on Wi-Fi: 1.1.1.1 8.8.8.8
 Connected!
 ● VPN connected  (pid 12345)
   Public IP : 54.254.169.193
