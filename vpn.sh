@@ -184,7 +184,20 @@ restore_dns_state() {
 
 resolve_domain_ipv4() {
   local domain="$1"
-  dig +short A "$domain" 2>/dev/null | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/' | head -n 4
+  local dns=""
+  local out=""
+
+  # Fail fast: do not block connect if DNS is unstable.
+  for dns in "${VPN_DNS_SERVERS[@]}"; do
+    out="$(dig +time=1 +tries=1 +short A "$domain" @"$dns" 2>/dev/null || true)"
+    if [[ -n "$out" ]]; then
+      echo "$out" | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/' | head -n 4
+      return 0
+    fi
+  done
+
+  # Final fallback to system resolver, still with tight timeout.
+  dig +time=1 +tries=1 +short A "$domain" 2>/dev/null | awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/' | head -n 4
 }
 
 apply_app_bypass_routes() {
