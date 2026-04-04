@@ -2,8 +2,8 @@
 
 Terraform infrastructure and operational scripts for a personal VPN on AWS EC2 (`ap-southeast-1`).
 Now configured for **OpenVPN dual transport on port 443**:
-- **UDP 443 (primary)** for speed
-- **TCP 443 (fallback)** for restrictive networks/DPI filtering
+- **TCP 443 (default)** for reliability on restrictive networks
+- **UDP 443 (optional)** for speed when the network allows it
 
 ---
 
@@ -48,8 +48,8 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 | EC2 Instance | `i-09e463ef599031fe7` |
 | Public IP | `54.254.169.193` |
 | Region | `ap-southeast-1` (Singapore) |
-| Protocol | OpenVPN, UDP 443 primary + TCP 443 fallback |
-| Tunnel | `10.8.0.1` (server) ↔ `10.8.0.2` (client) |
+| Protocol | OpenVPN, TCP 443 default + UDP 443 optional |
+| Tunnel | UDP `10.8.0.0/24`, TCP `10.9.0.0/24` |
 | SSH Key | `openvpn-key.pem` |
 
 ---
@@ -59,9 +59,9 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 | File | Purpose |
 |---|---|
 | `vpn.sh` | **macOS VPN helper** — connect / disconnect / status / toggle / log / speed |
-| `client-openvpn-udp.ovpn` | OpenVPN UDP client profile (default) |
-| `client-openvpn-tcp.ovpn` | OpenVPN TCP fallback profile |
-| `client-openvpn.ovpn` | Legacy profile (still supported by `vpn.sh`) |
+| `client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
+| `client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
+| `client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
 | `openvpn_setup.sh` | Server bootstrap + client profile generator |
 | `main.tf` | Terraform EC2 + security-group definition |
 | `variables.tf` / `outputs.tf` | Terraform vars and outputs |
@@ -74,6 +74,14 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 `openvpn_setup.sh` and `setup_openvpn_server.sh` now auto-detect the server's outbound interface for NAT rules instead of hardcoding `eth0`.
 
 This prevents a common EC2 issue where VPN connects successfully but tunnel traffic has no internet egress because the instance uses a different interface name (for example `ens5`).
+
+For dual transport, UDP and TCP server daemons must use different VPN subnets (for example UDP `10.8.0.0/24`, TCP `10.9.0.0/24`) to avoid route conflicts between `tun` devices.
+
+## Mobile Notes
+
+- Re-import profile(s) after server/profile updates; mobile apps keep old imported configs.
+- Use `client-openvpn.ovpn` or `client-openvpn-tcp.ovpn` as default profile.
+- Keep `client-openvpn-udp.ovpn` as an optional fallback profile.
 
 ---
 

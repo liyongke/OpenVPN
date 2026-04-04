@@ -84,7 +84,7 @@ port 443
 proto tcp-server
 dev tun
 topology subnet
-server 10.8.0.0 255.255.255.0
+server 10.9.0.0 255.255.255.0
 ifconfig-pool-persist /etc/openvpn/ipp-tcp.txt
 push "redirect-gateway def1"
 push "dhcp-option DNS 8.8.8.8"
@@ -120,14 +120,16 @@ echo "Using outbound interface for NAT: ${IFACE}"
 
 sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE 2>/dev/null || \
   sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE
-sudo iptables -C FORWARD -i tun0 -j ACCEPT 2>/dev/null || \
-  sudo iptables -A FORWARD -i tun0 -j ACCEPT
-sudo iptables -C FORWARD -o tun0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
-  sudo iptables -A FORWARD -o tun0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-sudo iptables -t mangle -C FORWARD -o tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
-  sudo iptables -t mangle -A FORWARD -o tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-sudo iptables -t mangle -C FORWARD -i tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
-  sudo iptables -t mangle -A FORWARD -i tun0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+sudo iptables -t nat -C POSTROUTING -s 10.9.0.0/24 -o "$IFACE" -j MASQUERADE 2>/dev/null || \
+  sudo iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -o "$IFACE" -j MASQUERADE
+sudo iptables -C FORWARD -i tun+ -j ACCEPT 2>/dev/null || \
+  sudo iptables -A FORWARD -i tun+ -j ACCEPT
+sudo iptables -C FORWARD -o tun+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+  sudo iptables -A FORWARD -o tun+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+sudo iptables -t mangle -C FORWARD -o tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+  sudo iptables -t mangle -A FORWARD -o tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+sudo iptables -t mangle -C FORWARD -i tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
+  sudo iptables -t mangle -A FORWARD -i tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
 sudo systemctl disable --now openvpn-server@server 2>/dev/null || true
 sudo systemctl disable --now openvpn@server 2>/dev/null || true
@@ -194,7 +196,7 @@ $(sudo cat /etc/openvpn/pki/ta.key)
 </tls-crypt>
 EOF
 
-cp "/home/ec2-user/${CLIENT_NAME}-udp.ovpn" "/home/ec2-user/${CLIENT_NAME}.ovpn"
+cp "/home/ec2-user/${CLIENT_NAME}-tcp.ovpn" "/home/ec2-user/${CLIENT_NAME}.ovpn"
 
 chmod 600 "/home/ec2-user/${CLIENT_NAME}.ovpn" "/home/ec2-user/${CLIENT_NAME}-udp.ovpn" "/home/ec2-user/${CLIENT_NAME}-tcp.ovpn"
 

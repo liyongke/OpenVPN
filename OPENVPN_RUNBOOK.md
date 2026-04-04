@@ -25,9 +25,9 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 
 **Problem:** WireGuard UDP traffic was being deep-packet-inspected and selectively dropped by the local network, on both port 51820 and port 443. Even valid handshakes produced `0 B received` on the client.
 
-**Solution:** Migrate to OpenVPN over TCP 443. TCP traffic on port 443 is rarely blocked because it is indistinguishable from HTTPS at the transport layer.
+**Solution:** Run OpenVPN dual transport on port 443 with TCP as default and UDP as optional mode.
 
-- Protocol: OpenVPN TCP `443`
+- Protocol: OpenVPN TCP `443` (default) + UDP `443` (optional)
 - Server: EC2 `i-09e463ef599031fe7`, `ap-southeast-1`, IP `54.254.169.193`
 - Verified result: `curl ifconfig.me` on client returns `54.254.169.193` (all traffic egresses through EC2)
 
@@ -37,24 +37,26 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 
 ```
 [ macOS / iPhone ]
-        │  TCP 443
+        │  TCP 443 (default) / UDP 443 (optional)
         ▼
 [ EC2 54.254.169.193 ]
-  tun0: 10.8.0.1
-  openvpn-server@server (TCP 443)
-  iptables MASQUERADE → eth0 → internet
+  tun0: 10.8.0.1 (UDP)
+  tun1: 10.9.0.1 (TCP)
+  openvpn@server-udp + openvpn@server-tcp
+  iptables MASQUERADE (10.8/24, 10.9/24) → eth0 → internet
 ```
 
 | Property | Value |
 |---|---|
-| OpenVPN mode | Static key (`secret`), point-to-point (`mode p2p`) |
-| Transport | TCP `443` |
-| Tunnel | `10.8.0.1` (server) ↔ `10.8.0.2` (client) |
+| OpenVPN mode | TLS cert mode (`ca/cert/key`) + `tls-crypt` |
+| Transport | TCP `443` (default) + UDP `443` (optional) |
+| Tunnel (UDP) | `10.8.0.1` (server) ↔ `10.8.0.2` (client) |
+| Tunnel (TCP) | `10.9.0.1` (server) ↔ `10.9.0.2` (client) |
 | Cipher | `AES-256-CBC` |
 | Auth | `SHA256` |
 | Key file | `/etc/openvpn/server/static.key` |
 | Config file | `/etc/openvpn/server/server.conf` |
-| systemd unit | `openvpn-server@server` |
+| systemd units | `openvpn@server-udp`, `openvpn@server-tcp` |
 | DNS (client) | `8.8.8.8`, `1.1.1.1` (forced through tunnel) |
 | MTU | `1500`, MSS fix `1400` (prevents TCP-over-TCP fragmentation) |
 
@@ -94,16 +96,16 @@ scp -i openvpn-key.pem ec2-user@54.254.169.193:/home/ec2-user/client-openvpn.ovp
 
 What `openvpn_setup.sh` does:
 1. Installs OpenVPN via `yum` if not present.
-2. Generates `/etc/openvpn/server/static.key` (2048-bit).
-3. Writes `/etc/openvpn/server/server.conf` with TCP 443, NAT, and IP forwarding.
-4. Enables and starts `openvpn-server@server` (falls back to `openvpn@server`).
-5. Writes `~/client-openvpn.ovpn` with the static key embedded inline.
+2. Builds a minimal PKI (`ca.crt`, server cert/key, client cert/key) and `ta.key`.
+3. Writes `/etc/openvpn/server-udp.conf` and `/etc/openvpn/server-tcp.conf`.
+4. Enables and starts `openvpn@server-udp` and `openvpn@server-tcp`.
+5. Writes `~/client-openvpn-udp.ovpn`, `~/client-openvpn-tcp.ovpn`, and `~/client-openvpn.ovpn` (TCP default).
 
 ### 4.3 Verify server is running
 
 ```bash
 ssh -i openvpn-key.pem ec2-user@54.254.169.193 \
-  'sudo systemctl is-active openvpn-server@server && sudo ss -lntp | grep :443'
+  'sudo systemctl is-active openvpn@server-udp && sudo systemctl is-active openvpn@server-tcp && sudo ss -lnup | grep :443 && sudo ss -lntp | grep :443'
 ```
 
 Expected: `active` and a listener on `0.0.0.0:443`.
@@ -115,29 +117,27 @@ Expected: `active` and a listener on `0.0.0.0:443`.
 File: `client-openvpn.ovpn`
 
 ```ini
-mode p2p
 dev tun
 proto tcp-client
 remote 54.254.169.193 443
 nobind
-allow-deprecated-insecure-static-crypto   # required for OpenVPN 2.6+
 persist-key
 persist-tun
-cipher AES-256-CBC
+cipher AES-256-GCM
 auth SHA256
-ifconfig 10.8.0.2 10.8.0.1
 redirect-gateway def1                     # full tunnel: all traffic via VPN
 dhcp-option DNS 8.8.8.8                   # override local DNS
 dhcp-option DNS 1.1.1.1
 tun-mtu 1500
 mssfix 1400                               # prevent TCP-over-TCP fragmentation
 verb 3
-<secret>
-...2048-bit static key...
-</secret>
+<ca>...</ca>
+<cert>...</cert>
+<key>...</key>
+<tls-crypt>...</tls-crypt>
 ```
 
-**Critical:** do **not** include the `client` directive. It triggers TLS mode and conflicts with static-key mode, producing `Bad encapsulated packet length` errors.
+**Critical:** client and server must use matching cert/key/ta material.
 
 ---
 
@@ -236,7 +236,7 @@ sudo kill "$(cat /tmp/openvpn-client.pid)"
 4. Toggle the profile switch to connect.
 5. Verify: open a browser and check `ifconfig.me` — it should show `54.254.169.193`.
 
-> **Note:** iPhone OpenVPN Connect handles `allow-deprecated-insecure-static-crypto` transparently; no extra steps needed.
+> **Note:** If iPhone still fails after updates, remove old imported profile and re-import the latest `.ovpn` file.
 
 ---
 
@@ -338,6 +338,29 @@ sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE || 
 
 This logic is now built into `openvpn_setup.sh` and `setup_openvpn_server.sh`.
 
+### Issue H — UDP connects but no internet, while TCP works (or vice versa)
+
+**Symptom:** One transport connects and passes traffic, but the other transport connects with handshake only and cannot pass data.
+
+**Root cause:** Both OpenVPN daemons were configured with the same tunnel subnet (`10.8.0.0/24`) while running simultaneously. This creates conflicting kernel routes across `tun0`/`tun1` and breaks return path for one transport.
+
+**Resolution:** Use distinct tunnel subnets per daemon.
+
+```ini
+# UDP daemon
+server 10.8.0.0 255.255.255.0
+
+# TCP daemon
+server 10.9.0.0 255.255.255.0
+```
+
+Also ensure NAT rules exist for both subnets:
+
+```bash
+sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o <iface> -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -o <iface> -j MASQUERADE
+```
+
 ---
 
 ## 10. Operational Checks
@@ -349,16 +372,19 @@ This logic is now built into `openvpn_setup.sh` and `setup_openvpn_server.sh`.
 ssh -i openvpn-key.pem ec2-user@54.254.169.193
 
 # Service status
-sudo systemctl status openvpn-server@server --no-pager
+sudo systemctl status openvpn@server-udp --no-pager
+sudo systemctl status openvpn@server-tcp --no-pager
 
 # Recent logs
-sudo journalctl -u openvpn-server@server -n 50 --no-pager
+sudo journalctl -u openvpn@server-udp -n 50 --no-pager
+sudo journalctl -u openvpn@server-tcp -n 50 --no-pager
 
 # Confirm port 443 is listening
 sudo ss -lntp | grep :443
 
-# Active tunnel connections
+# Active tunnel interfaces
 sudo ip addr show tun0
+sudo ip addr show tun1
 
 # NAT rules (should see MASQUERADE)
 sudo iptables -t nat -L POSTROUTING -n -v
@@ -387,15 +413,9 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 
 ## 11. Security Notes
 
-- **Static-key mode** is operationally simple but provides no forward secrecy. If the key is compromised, past captured traffic can be decrypted. Prefer certificate/TLS mode for production deployments.
-- **`client-openvpn.ovpn` contains the secret key.** Keep it `chmod 600`. Never commit it to a public repo.
-- **Rotate the static key** if the profile is shared, lost, or copied beyond the intended device:
-  ```bash
-  ssh -i openvpn-key.pem ec2-user@54.254.169.193 'sudo \
-    openvpn --genkey secret /etc/openvpn/server/static.key && \
-    sudo systemctl restart openvpn-server@server'
-  # Then regenerate client-openvpn.ovpn
-  ```
+- **Profile files contain private client keys.** Keep them `chmod 600` and never commit to a public repository.
+- **Rotate client credentials** if a profile is shared/lost: regenerate client cert/key and redistribute updated profile.
+- **Rotate server credentials** if compromise is suspected: regenerate server cert/key and `ta.key`, then redistribute fresh profiles.
 - **`openvpn-key.pem`** gives SSH access to the EC2 instance. Keep it `chmod 400`.
 - Security group `sg-0ec3c5548c5af11d9` allows TCP 443 from `0.0.0.0/0`. Restricting to your known IP ranges improves posture if static IPs are available.
 
@@ -444,6 +464,7 @@ sed -i '' "s/remote .* 443/remote $NEW_IP 443/" client-openvpn.ovpn
 
 ```bash
 ssh -i openvpn-key.pem ec2-user@54.254.169.193 \
-  'sudo systemctl restart openvpn-server@server && \
-   sudo systemctl status openvpn-server@server --no-pager'
+  'sudo systemctl restart openvpn@server-udp openvpn@server-tcp && \
+   sudo systemctl status openvpn@server-udp --no-pager && \
+   sudo systemctl status openvpn@server-tcp --no-pager'
 ```

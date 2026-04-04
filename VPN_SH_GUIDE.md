@@ -12,8 +12,8 @@ brew install openvpn
 
 2. Keep these files in the same folder:
 - `vpn.sh`
-- `client-openvpn-udp.ovpn` (default)
-- `client-openvpn-tcp.ovpn` (fallback)
+- `client-openvpn-tcp.ovpn` (default)
+- `client-openvpn-udp.ovpn` (optional)
 
 3. Make script executable:
 
