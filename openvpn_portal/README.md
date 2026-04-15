@@ -35,7 +35,7 @@ Device identification note:
 
 1. Change directory:
 
-   cd vpn-portal-phase1-readonly
+   cd openvpn_portal
 
 2. Optional env setup:
 
@@ -70,7 +70,7 @@ Environment variables:
 - OPENVPN_STATUS_FILE default: auto-detected common paths (legacy single-source fallback)
 - OPENVPN_STATUS_FILES default: /var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log (preferred)
 - OPENVPN_LOG_FILE default: /var/log/openvpn/openvpn.log
-- PORTAL_HISTORY_DB default: /home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+- PORTAL_HISTORY_DB default: /home/ec2-user/apps/openvpn_portal/data/history.sqlite3
 - PORTAL_HISTORY_RETENTION_DAYS default: 7
 - PORTAL_HISTORY_SAMPLE_SECONDS default: 60
 - PORTAL_LIVE_POLL_SECONDS default: 1.0
@@ -100,7 +100,7 @@ Automatic server-side enrichment (recommended):
 EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.
 - Legacy `openvpn-server@server` should stay disabled.
-- Rebuild `/home/ec2-user/apps/vpn-portal-phase1-readonly/.python-venv` on EC2 after code deploy (do not copy local venv binaries).
+- Rebuild `/home/ec2-user/apps/openvpn_portal/.python-venv` on EC2 after code deploy (do not copy local venv binaries).
 - Server configs include status directives:
    - `/etc/openvpn/server-tcp.conf` -> `/var/log/openvpn/status-tcp.log`
    - `/etc/openvpn/server-udp.conf` -> `/var/log/openvpn/status-udp.log`

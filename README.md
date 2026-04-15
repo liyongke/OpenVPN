@@ -180,7 +180,7 @@ curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/live/summary" | head
 ```
 
 Portal runtime note:
-- Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env`.
+- Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/openvpn_portal/.env`.
 - `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
 - Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
 - Keep the OpenVPN `client-connect` hook enabled in both server configs:
