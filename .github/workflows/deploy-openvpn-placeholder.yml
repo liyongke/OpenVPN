@@ -23,11 +23,12 @@ jobs:
       - name: Future deploy requirements (reference)
         run: |
           echo "Required repo secrets (planned):"
-          echo "- AWS_ACCESS_KEY_ID"
-          echo "- AWS_SECRET_ACCESS_KEY"
+          echo "- AWS_ROLE_TO_ASSUME (preferred: GitHub OIDC + IAM role)"
           echo "- AWS_REGION"
           echo "- EC2_INSTANCE_ID"
           echo "- ARTIFACT_S3_URI"
+          echo ""
+          echo "Avoid long-lived static AWS keys when possible."
           echo ""
           echo "Typical rollout sequence (planned):"
           echo "1) Build/package portal artifact"

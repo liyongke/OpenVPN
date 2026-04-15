@@ -13,7 +13,7 @@ Reusable AI skills and prompt templates for faster operations and debugging in t
 
 - Canonical repo prompt templates: `.github/prompts`
 - Repo default AI behavior rules: `.github/copilot-instructions.md`
-- Local one-click VS Code prompts: `/Users/ryan/Library/Application Support/Code/User/prompts`
+- Local one-click VS Code prompts: `$HOME/Library/Application Support/Code/User/prompts`
 
 Sync rule:
 - Keep repo prompt templates and local user prompts aligned after any template update.

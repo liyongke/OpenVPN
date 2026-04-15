@@ -46,7 +46,7 @@ vpn.cmd disconnect
 Default protocol note:
 - `vpn.sh connect` now defaults to TCP for better reliability on restrictive networks.
 
-> **Tip:** add `alias vpn='/Users/ryan/Workspace/OpenVPN_deployment/vpn.sh'` to `~/.zshrc` to use `vpn connect` from anywhere.
+> **Tip:** add `alias vpn='/absolute/path/to/OpenVPN_deployment/vpn.sh'` to `~/.zshrc` to use `vpn connect` from anywhere.
 
 ### Verify the VPN is working
 
@@ -119,7 +119,7 @@ Server config consistency note:
 
 AI prompt location note:
 - Repo copies live under `.github/prompts` and are shared through git.
-- One-click VS Code user prompts remain under `/Users/ryan/Library/Application Support/Code/User/prompts`.
+- One-click VS Code user prompts remain under `$HOME/Library/Application Support/Code/User/prompts`.
 - Keep both in sync when prompt templates are updated.
 
 GitHub Actions deployment note:
@@ -169,6 +169,10 @@ aws ssm send-command \
 ### Admin Checklist
 
 Run these checks regularly:
+
+TLS/auth safety note:
+- For production checks, prefer valid TLS trust (`--cacert <ca.pem>` or trusted cert chain) instead of `-k`.
+- Avoid typing raw credentials directly in shell history; load from a secured local file or secret store.
 
 ```bash
 # 1) Confirm VPN and portal services are up (SSM)

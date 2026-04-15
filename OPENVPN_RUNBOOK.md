@@ -615,5 +615,5 @@ This file contains reusable prompt templates for triage, root-cause proof, safe 
 
 Location and usage:
 - Repository-owned prompt templates are versioned under `.github/prompts`.
-- Local one-click VS Code prompts are stored in `/Users/ryan/Library/Application Support/Code/User/prompts`.
+- Local one-click VS Code prompts are stored in `$HOME/Library/Application Support/Code/User/prompts`.
 - If you update one location, copy changes to the other to keep behavior consistent.
