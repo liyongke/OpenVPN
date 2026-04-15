@@ -22,8 +22,8 @@ This folder contains an isolated portal MVP that does not modify OpenVPN service
 
 Device identification note:
 - OpenVPN status files do not include a reliable phone/pc field by default.
-- The portal uses best-effort inference from usernames/common names.
-- For accurate labels, provide a device hints file (see `device_hints.example.json`).
+- The portal falls back to best-effort inference from usernames/common names only when no hints exist.
+- Accurate labels come from the server-side device hints file and are matched by real endpoint first (`ip:port`), then by real IP, username, and common name.
 
 ## What it does not do yet
 
@@ -74,7 +74,7 @@ Environment variables:
 - PORTAL_HISTORY_RETENTION_DAYS default: 7
 - PORTAL_HISTORY_SAMPLE_SECONDS default: 60
 - PORTAL_LIVE_POLL_SECONDS default: 1.0
-- PORTAL_DEVICE_HINTS_FILE default: /home/ec2-user/apps/vpn-portal-phase1-readonly/device_hints.json
+- PORTAL_DEVICE_HINTS_FILE default: /var/log/openvpn/device_hints.json
 - PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
 
 ## Notes for your existing deployment
@@ -89,7 +89,13 @@ Environment variables:
 
 Device hints file format:
 - Copy `device_hints.example.json` to your deployment path and edit values.
-- Sections supported: `users`, `common_names`, `real_addresses`.
+- Sections supported: `users`, `common_names`, `real_addresses`, `real_endpoints`.
+
+Automatic server-side enrichment (recommended):
+- Install and enable `scripts/openvpn_client_connect_device_hints.sh` as an OpenVPN `client-connect` hook.
+- The hook captures connect-time metadata (for example `IV_PLAT`) and writes `/var/log/openvpn/device_hints.json`.
+- Endpoint-aware matching avoids cross-device collisions when the same cert/common name is reused from multiple devices.
+- Reconnect clients after enabling the hook so fresh metadata is recorded.
 
 EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.
@@ -98,3 +104,4 @@ EC2 deployment baseline used by this repo:
 - Server configs include status directives:
    - `/etc/openvpn/server-tcp.conf` -> `/var/log/openvpn/status-tcp.log`
    - `/etc/openvpn/server-udp.conf` -> `/var/log/openvpn/status-udp.log`
+- Keep exactly one `status` directive in each config; duplicated swapped status lines will make protocol rows appear reversed.

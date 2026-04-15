@@ -77,5 +77,5 @@ def load_settings() -> Settings:
         history_retention_days=int(os.getenv("PORTAL_HISTORY_RETENTION_DAYS", "7")),
         history_sample_seconds=int(os.getenv("PORTAL_HISTORY_SAMPLE_SECONDS", "60")),
         live_poll_seconds=float(os.getenv("PORTAL_LIVE_POLL_SECONDS", "1.0")),
-        device_hints_file=os.getenv("PORTAL_DEVICE_HINTS_FILE", "/home/ec2-user/apps/vpn-portal-phase1-readonly/device_hints.json"),
+        device_hints_file=os.getenv("PORTAL_DEVICE_HINTS_FILE", "/var/log/openvpn/device_hints.json"),
     )

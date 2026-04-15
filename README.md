@@ -89,11 +89,17 @@ terraform output -raw vpn_server_public_ip
 
 ## Server NAT Note
 
-`openvpn_setup.sh` and `setup_openvpn_server.sh` now auto-detect the server's outbound interface for NAT rules instead of hardcoding `eth0`.
+`openvpn_setup.sh` auto-detects the server's outbound interface for NAT rules instead of hardcoding `eth0`.
 
 This prevents a common EC2 issue where VPN connects successfully but tunnel traffic has no internet egress because the instance uses a different interface name (for example `ens5`).
 
 For dual transport, UDP and TCP server daemons must use different VPN subnets (for example UDP `10.8.0.0/24`, TCP `10.9.0.0/24`) to avoid route conflicts between `tun` devices.
+
+Server config consistency note:
+- Keep exactly one `status` directive in each OpenVPN server config.
+- `openvpn@server-tcp` must write `/var/log/openvpn/status-tcp.log`.
+- `openvpn@server-udp` must write `/var/log/openvpn/status-udp.log`.
+- Duplicated or swapped `status` directives will make the portal show valid device data on the wrong protocol row.
 
 ## Mobile Notes
 
@@ -116,6 +122,7 @@ For dual transport, UDP and TCP server daemons must use different VPN subnets (f
 - Backend app binds only to `127.0.0.1:8088`
 - Live dashboard shows summary/status/sessions first, with 7-day history moved to the bottom
 - Status Source panel lists each configured status file once and links each source to the read-only status file viewer
+- Active session classification is endpoint-aware, so reused certs/common names can still be distinguished per live connection when peer metadata is available
 
 Security notes:
 - Store portal credentials in a password manager.
@@ -176,6 +183,11 @@ Portal runtime note:
 - Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env`.
 - `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
 - Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
+- Keep the OpenVPN `client-connect` hook enabled in both server configs:
+  - `script-security 2`
+  - `setenv DEVICE_HINTS_FILE /var/log/openvpn/device_hints.json`
+  - `client-connect /etc/openvpn/scripts/client-connect-device-hints.sh`
+- Device hints are matched by real endpoint (`ip:port`) first, then by real IP, username, and common name.
 
 ---
 

@@ -68,7 +68,7 @@ def _parse_hint_entry(entry: Any) -> tuple[str, str] | None:
 
 
 def _load_device_hints(device_hints_file: str) -> dict[str, dict[str, tuple[str, str]]]:
-    empty = {"users": {}, "common_names": {}, "real_addresses": {}}
+    empty = {"users": {}, "common_names": {}, "real_addresses": {}, "real_endpoints": {}}
     if not device_hints_file:
         return empty
 
@@ -84,8 +84,8 @@ def _load_device_hints(device_hints_file: str) -> dict[str, dict[str, tuple[str,
     if not isinstance(raw, dict):
         return empty
 
-    result = {"users": {}, "common_names": {}, "real_addresses": {}}
-    for section in ("users", "common_names", "real_addresses"):
+    result = {"users": {}, "common_names": {}, "real_addresses": {}, "real_endpoints": {}}
+    for section in ("users", "common_names", "real_addresses", "real_endpoints"):
         items = raw.get(section, {})
         if not isinstance(items, dict):
             continue
@@ -108,6 +108,17 @@ def _apply_device_hints(
     users = device_hints.get("users", {})
     common_names = device_hints.get("common_names", {})
     real_addresses = device_hints.get("real_addresses", {})
+    real_endpoints = device_hints.get("real_endpoints", {})
+
+    endpoint_key = real_address.strip().lower()
+    if endpoint_key in real_endpoints:
+        return real_endpoints[endpoint_key]
+
+    # Real address is the most specific signal for a live session and avoids
+    # cross-device collisions when the same username/common name is reused.
+    ip_key = real_address.strip().lower().split(":", 1)[0]
+    if ip_key in real_addresses:
+        return real_addresses[ip_key]
 
     user_key = username.strip().lower()
     if user_key in users:
@@ -116,10 +127,6 @@ def _apply_device_hints(
     cn_key = common_name.strip().lower()
     if cn_key in common_names:
         return common_names[cn_key]
-
-    ip_key = real_address.strip().lower().split(":", 1)[0]
-    if ip_key in real_addresses:
-        return real_addresses[ip_key]
 
     return None
 

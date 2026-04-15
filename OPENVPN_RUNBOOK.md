@@ -58,6 +58,8 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 | Server config files | `/etc/openvpn/server-tcp.conf`, `/etc/openvpn/server-udp.conf` |
 | systemd units | `openvpn@server-udp`, `openvpn@server-tcp` |
 | Status files | `/var/log/openvpn/status-tcp.log`, `/var/log/openvpn/status-udp.log` |
+| Device hints file | `/var/log/openvpn/device_hints.json` |
+| Device hint hook | `/etc/openvpn/scripts/client-connect-device-hints.sh` |
 | DNS (client) | `8.8.8.8`, `1.1.1.1` (forced through tunnel) |
 | MTU | `1500`, MSS fix `1400` (prevents TCP-over-TCP fragmentation) |
 
@@ -70,7 +72,6 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 | `vpn.sh` | macOS helper — connect / disconnect / status / toggle / log |
 | `client-openvpn.ovpn` | Client profile; import on macOS or iPhone |
 | `openvpn_setup.sh` | Server bootstrap + profile generator; run on EC2 via SSM |
-| `setup_openvpn_server.sh` | Earlier draft; kept for reference |
 | `main.tf` | Terraform EC2 + security-group definition |
 
 ---
@@ -104,9 +105,10 @@ aws ssm start-session --target "$INSTANCE_ID"
 What `openvpn_setup.sh` does:
 1. Installs OpenVPN via `yum` if not present.
 2. Builds a minimal PKI (`ca.crt`, server cert/key, client cert/key) and `ta.key`.
-3. Writes `/etc/openvpn/server-udp.conf` and `/etc/openvpn/server-tcp.conf`.
+3. Writes `/etc/openvpn/server-udp.conf` and `/etc/openvpn/server-tcp.conf` with per-service status files.
 4. Enables and starts `openvpn@server-udp` and `openvpn@server-tcp`.
-5. Writes `~/client-openvpn-udp.ovpn`, `~/client-openvpn-tcp.ovpn`, and `~/client-openvpn.ovpn` (TCP default).
+5. Installs the device-hints `client-connect` hook and writable hints path.
+6. Writes `~/client-openvpn-udp.ovpn`, `~/client-openvpn-tcp.ovpn`, and `~/client-openvpn.ovpn` (TCP default).
 
 ### 4.3 Verify server is running
 
@@ -131,6 +133,17 @@ status-version 3
 # /etc/openvpn/server-udp.conf
 status /var/log/openvpn/status-udp.log
 status-version 3
+```
+
+Important:
+- Keep exactly one `status` line in each config.
+- A duplicated second `status` line pointing at the opposite file will cause TCP and UDP sessions to appear swapped in the portal.
+- For server-side device enrichment, keep these lines in both configs:
+
+```ini
+script-security 2
+setenv DEVICE_HINTS_FILE /var/log/openvpn/device_hints.json
+client-connect /etc/openvpn/scripts/client-connect-device-hints.sh
 ```
 
 ---
@@ -318,6 +331,36 @@ allow-deprecated-insecure-static-crypto
 
 ### Issue E — macOS `sudo openvpn: command not found`
 
+### Issue F — Portal showed `unknown` device for active sessions
+
+**Symptom:** Active sessions were visible, but device/platform stayed `unknown`.
+
+**Root cause:** The server-side `client-connect` hook was not writing valid JSON hints because the deployed hook script was broken, not enabled, or writing to an unwritable path.
+
+**Resolution:**
+- Keep the hook enabled in both server configs.
+- Ensure `/var/log/openvpn/device_hints.json` is writable by the OpenVPN runtime user (`nobody`).
+- Ensure `/etc/openvpn/scripts/client-connect-device-hints.sh` passes `bash -n` and can run as `nobody`.
+- Reconnect clients after fixing the hook so fresh `IV_*` metadata is captured.
+
+### Issue G — Portal showed correct devices on the wrong protocol rows
+
+**Symptom:** Phone/PC labels appeared reversed between TCP and UDP rows.
+
+**Root cause:** Both server configs contained duplicated `status` directives, and the later directive pointed at the opposite status file. The portal was reading the files correctly, but the daemons were writing to the wrong ones.
+
+**Resolution:**
+
+```ini
+# /etc/openvpn/server-tcp.conf
+status /var/log/openvpn/status-tcp.log 2
+
+# /etc/openvpn/server-udp.conf
+status /var/log/openvpn/status-udp.log 2
+```
+
+Keep only one `status` directive per config.
+
 **Root cause:** `sudo` uses a restricted PATH that excludes `/opt/homebrew/sbin`.
 
 **Resolution:** Always use the full path:
@@ -359,7 +402,7 @@ sudo iptables -t nat -C POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE || 
   sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o "$IFACE" -j MASQUERADE
 ```
 
-This logic is now built into `openvpn_setup.sh` and `setup_openvpn_server.sh`.
+This logic is now built into `openvpn_setup.sh`.
 
 ### Issue H — UDP connects but no internet, while TCP works (or vice versa)
 
