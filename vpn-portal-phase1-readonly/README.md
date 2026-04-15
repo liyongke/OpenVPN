@@ -14,6 +14,9 @@ This folder contains an isolated portal MVP that does not modify OpenVPN service
 - Active sessions from OpenVPN status file.
 - Current snapshot traffic per session and per user.
 - Summary cards for active clients, total download, and total upload.
+- Live auto-refresh dashboard updates using server-sent events (SSE).
+- Built-in daily history for the last 7 days (SQLite-backed snapshots).
+- Clickable status file path that opens a status file viewer page.
 
 ## What it does not do yet
 
@@ -46,6 +49,10 @@ This folder contains an isolated portal MVP that does not modify OpenVPN service
 - GET /healthz
 - GET /api/sessions
 - GET /api/summary
+- GET /api/live/summary
+- GET /api/live/sessions (SSE stream)
+- GET /api/history/7d
+- GET /status-file
 
 ## Configuration
 
@@ -55,9 +62,13 @@ Environment variables:
 - PORTAL_PORT default: 8088
 - OPENVPN_STATUS_FILE default: auto-detected common paths
 - OPENVPN_LOG_FILE default: /var/log/openvpn/openvpn.log
+- PORTAL_HISTORY_DB default: /home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+- PORTAL_HISTORY_RETENTION_DAYS default: 7
+- PORTAL_HISTORY_SAMPLE_SECONDS default: 60
 - PORTAL_TITLE default: OpenVPN Portal Phase 1 (Read-Only)
 
 ## Notes for your existing deployment
 
 - If your OpenVPN status file path differs, set OPENVPN_STATUS_FILE before start.
 - If no status file exists, the UI still runs and reports status source missing.
+- History is sampled periodically from live snapshots and kept for 7 days by default.

@@ -134,7 +134,12 @@ def _fmt_mib(value_bytes: int) -> float:
 def load_openvpn_status(status_file: str) -> dict[str, Any]:
     path = Path(status_file)
 
-    if not path.exists():
+    try:
+        exists = path.exists()
+    except PermissionError:
+        exists = False
+
+    if not exists:
         return {
             "status_file": status_file,
             "status_exists": False,
@@ -150,7 +155,24 @@ def load_openvpn_status(status_file: str) -> dict[str, Any]:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except (PermissionError, OSError):
+        return {
+            "status_file": status_file,
+            "status_exists": False,
+            "updated_at": "",
+            "sessions": [],
+            "summary": {
+                "active_clients": 0,
+                "total_bytes_received": 0,
+                "total_bytes_sent": 0,
+                "total_mib_received": 0.0,
+                "total_mib_sent": 0.0,
+            },
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     if any(line.startswith("CLIENT_LIST,") for line in lines):
         sessions, updated_at = _parse_csv_status(lines)
     else:

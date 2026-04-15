@@ -12,6 +12,9 @@ class Settings:
     title: str
     status_file: str
     log_file: str
+    history_db_path: str
+    history_retention_days: int
+    history_sample_seconds: int
 
 
 def _detect_status_file() -> str:
@@ -45,4 +48,7 @@ def load_settings() -> Settings:
         title=os.getenv("PORTAL_TITLE", "OpenVPN Portal Phase 1 (Read-Only)"),
         status_file=_detect_status_file(),
         log_file=os.getenv("OPENVPN_LOG_FILE", "/var/log/openvpn/openvpn.log"),
+        history_db_path=os.getenv("PORTAL_HISTORY_DB", "/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3"),
+        history_retention_days=int(os.getenv("PORTAL_HISTORY_RETENTION_DAYS", "7")),
+        history_sample_seconds=int(os.getenv("PORTAL_HISTORY_SAMPLE_SECONDS", "60")),
     )

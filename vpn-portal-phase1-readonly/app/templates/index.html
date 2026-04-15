@@ -16,29 +16,53 @@
     <section class="cards">
       <article class="card">
         <h2>Active Clients</h2>
-        <p class="metric">{{ payload.summary.active_clients }}</p>
+        <p class="metric" id="metric-active">{{ payload.summary.active_clients }}</p>
       </article>
       <article class="card">
         <h2>Total Download</h2>
-        <p class="metric">{{ payload.summary.total_mib_received }} MiB</p>
+        <p class="metric" id="metric-download">{{ payload.summary.total_mib_received }} MiB</p>
       </article>
       <article class="card">
         <h2>Total Upload</h2>
-        <p class="metric">{{ payload.summary.total_mib_sent }} MiB</p>
+        <p class="metric" id="metric-upload">{{ payload.summary.total_mib_sent }} MiB</p>
       </article>
     </section>
 
     <section class="panel">
       <h2>Status Source</h2>
-      <p>Status file: {{ payload.status_file }}</p>
-      <p>Exists: {{ payload.status_exists }}</p>
-      <p>Updated at: {{ payload.updated_at if payload.updated_at else 'n/a' }}</p>
-      <p>Rendered at: {{ payload.generated_at }}</p>
+      <p>Status file: <a id="status-file-link" href="/status-file"><span id="status-file">{{ payload.status_file }}</span></a></p>
+      <p>Exists: <span id="status-exists">{{ payload.status_exists }}</span></p>
+      <p>Updated at: <span id="status-updated">{{ payload.updated_at if payload.updated_at else 'n/a' }}</span></p>
+      <p>Rendered at: <span id="status-rendered">{{ payload.generated_at }}</span></p>
+    </section>
+
+    <section class="panel">
+      <h2>History (Last 7 Days)</h2>
+      <div id="history-chart" class="history-chart" aria-label="7 day history chart"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Day (UTC)</th>
+              <th>Samples</th>
+              <th>Peak Active</th>
+              <th>Avg Active</th>
+              <th>Max Download Snapshot (MiB)</th>
+              <th>Max Upload Snapshot (MiB)</th>
+              <th>Last Sample</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr>
+              <td colspan="7">Collecting history data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="panel">
       <h2>Active Sessions</h2>
-      {% if payload.sessions %}
       <div class="table-wrap">
         <table>
           <thead>
@@ -52,7 +76,8 @@
               <th>Connected Since</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="sessions-body">
+            {% if payload.sessions %}
             {% for session in payload.sessions %}
             <tr>
               <td>{{ session.username }}</td>
@@ -64,17 +89,18 @@
               <td>{{ session.connected_since }}</td>
             </tr>
             {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="7">No active sessions found in status file.</td>
+            </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
-      {% else %}
-      <p>No active sessions found in status file.</p>
-      {% endif %}
     </section>
 
     <section class="panel">
       <h2>Usage by User (Current Snapshot)</h2>
-      {% if payload.summary.user_usage %}
       <div class="table-wrap">
         <table>
           <thead>
@@ -85,7 +111,8 @@
               <th>Upload (MiB)</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="usage-body">
+            {% if payload.summary.user_usage %}
             {% for user in payload.summary.user_usage %}
             <tr>
               <td>{{ user.username }}</td>
@@ -94,13 +121,209 @@
               <td>{{ user.mib_sent }}</td>
             </tr>
             {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="4">No user usage available from current status snapshot.</td>
+            </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>
-      {% else %}
-      <p>No user usage available from current status snapshot.</p>
-      {% endif %}
     </section>
   </main>
+  <script>
+    const byId = (id) => document.getElementById(id);
+
+    function setText(id, value) {
+      const el = byId(id);
+      if (el) {
+        el.textContent = value;
+      }
+    }
+
+    function renderSessions(sessions) {
+      const body = byId("sessions-body");
+      if (!body) return;
+
+      if (!sessions || sessions.length === 0) {
+        body.innerHTML = '<tr><td colspan="7">No active sessions found in status file.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = sessions.map((s) => `
+        <tr>
+          <td>${s.username}</td>
+          <td>${s.common_name}</td>
+          <td>${s.real_address}</td>
+          <td>${s.virtual_address || ''}</td>
+          <td>${s.mib_received}</td>
+          <td>${s.mib_sent}</td>
+          <td>${s.connected_since}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderUsage(users) {
+      const body = byId("usage-body");
+      if (!body) return;
+
+      if (!users || users.length === 0) {
+        body.innerHTML = '<tr><td colspan="4">No user usage available from current status snapshot.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = users.map((u) => `
+        <tr>
+          <td>${u.username}</td>
+          <td>${u.session_count}</td>
+          <td>${u.mib_received}</td>
+          <td>${u.mib_sent}</td>
+        </tr>
+      `).join("");
+    }
+
+    function applySnapshot(payload) {
+      setText("metric-active", payload.summary.active_clients);
+      setText("metric-download", `${payload.summary.total_mib_received} MiB`);
+      setText("metric-upload", `${payload.summary.total_mib_sent} MiB`);
+
+      setText("status-file", payload.status_file);
+      setText("status-exists", String(payload.status_exists));
+      setText("status-updated", payload.updated_at || "n/a");
+      setText("status-rendered", payload.generated_at);
+
+      renderSessions(payload.sessions || []);
+      renderUsage(payload.summary.user_usage || []);
+    }
+
+    function renderHistoryChart(days) {
+      const root = byId("history-chart");
+      if (!root) return;
+
+      if (!days || !days.length) {
+        root.innerHTML = '<p class="chart-empty">No chart data yet. Samples appear every minute.</p>';
+        return;
+      }
+
+      const ordered = [...days].sort((a, b) => String(a.day).localeCompare(String(b.day)));
+      const width = 980;
+      const height = 220;
+      const pad = { top: 20, right: 24, bottom: 42, left: 54 };
+      const innerW = width - pad.left - pad.right;
+      const innerH = height - pad.top - pad.bottom;
+
+      const peakMax = Math.max(1, ...ordered.map((d) => Number(d.peak_active_clients || 0)));
+      const trafficMax = Math.max(1, ...ordered.map((d) => Number(d.max_total_mib_received || 0) + Number(d.max_total_mib_sent || 0)));
+      const slot = innerW / ordered.length;
+      const barW = Math.max(18, slot * 0.5);
+
+      const bars = ordered
+        .map((d, i) => {
+          const totalMiB = Number(d.max_total_mib_received || 0) + Number(d.max_total_mib_sent || 0);
+          const h = Math.max(2, Math.round((totalMiB / trafficMax) * innerH));
+          const x = Math.round(pad.left + i * slot + (slot - barW) / 2);
+          const y = pad.top + innerH - h;
+          return `<rect x="${x}" y="${y}" width="${Math.round(barW)}" height="${h}" rx="4" class="hist-bar" />`;
+        })
+        .join("");
+
+      const points = ordered
+        .map((d, i) => {
+          const clients = Number(d.peak_active_clients || 0);
+          const x = Math.round(pad.left + i * slot + slot / 2);
+          const y = Math.round(pad.top + innerH - (clients / peakMax) * innerH);
+          return `${x},${y}`;
+        })
+        .join(" ");
+
+      const lineDots = ordered
+        .map((d, i) => {
+          const clients = Number(d.peak_active_clients || 0);
+          const x = Math.round(pad.left + i * slot + slot / 2);
+          const y = Math.round(pad.top + innerH - (clients / peakMax) * innerH);
+          return `<circle cx="${x}" cy="${y}" r="3.5" class="hist-dot"><title>${d.day}: peak ${clients}</title></circle>`;
+        })
+        .join("");
+
+      const xLabels = ordered
+        .map((d, i) => {
+          const x = Math.round(pad.left + i * slot + slot / 2);
+          const shortDay = String(d.day).slice(5);
+          return `<text x="${x}" y="${height - 16}" text-anchor="middle" class="hist-label">${shortDay}</text>`;
+        })
+        .join("");
+
+      root.innerHTML = `
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="History chart with traffic and peak clients">
+          <line x1="${pad.left}" y1="${pad.top + innerH}" x2="${width - pad.right}" y2="${pad.top + innerH}" class="hist-axis" />
+          <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + innerH}" class="hist-axis" />
+          ${bars}
+          <polyline points="${points}" fill="none" class="hist-line" />
+          ${lineDots}
+          ${xLabels}
+        </svg>
+        <div class="hist-legend">
+          <span><i class="legend-swatch bar"></i> Daily max traffic snapshot (MiB)</span>
+          <span><i class="legend-swatch line"></i> Daily peak active clients</span>
+        </div>
+      `;
+    }
+
+    async function refreshHistory() {
+      const body = byId("history-body");
+      if (!body) return;
+
+      try {
+        const res = await fetch("/api/history/7d", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        const days = data.days || [];
+        renderHistoryChart(days);
+        if (!days.length) {
+          body.innerHTML = '<tr><td colspan="7">No history yet. This table fills as snapshots are collected.</td></tr>';
+          return;
+        }
+
+        body.innerHTML = days.map((d) => `
+          <tr>
+            <td>${d.day}</td>
+            <td>${d.sample_count}</td>
+            <td>${d.peak_active_clients}</td>
+            <td>${d.avg_active_clients}</td>
+            <td>${d.max_total_mib_received}</td>
+            <td>${d.max_total_mib_sent}</td>
+            <td>${d.last_sampled_at || 'n/a'}</td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        renderHistoryChart([]);
+        body.innerHTML = '<tr><td colspan="7">Failed to load history data.</td></tr>';
+      }
+    }
+
+    function startLiveStream() {
+      const source = new EventSource("/api/live/sessions");
+      source.addEventListener("snapshot", (event) => {
+        try {
+          const envelope = JSON.parse(event.data);
+          applySnapshot(envelope.payload);
+        } catch (err) {
+          console.error("Failed to parse snapshot event", err);
+        }
+      });
+
+      source.onerror = () => {
+        source.close();
+        setTimeout(startLiveStream, 2000);
+      };
+    }
+
+    refreshHistory();
+    setInterval(refreshHistory, 30000);
+    startLiveStream();
+  </script>
 </body>
 </html>

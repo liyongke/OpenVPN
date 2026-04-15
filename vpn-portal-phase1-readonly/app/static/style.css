@@ -75,6 +75,15 @@ body {
   margin-top: 0;
 }
 
+.panel a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.panel a:hover {
+  text-decoration: underline;
+}
+
 .table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -97,6 +106,91 @@ th {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 600;
+}
+
+.status-content {
+  margin: 0;
+  background: #0b1220;
+  color: #cdd8ea;
+  border-radius: 10px;
+  padding: 12px;
+  max-height: 65vh;
+  overflow: auto;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.error {
+  color: #b21f3d;
+}
+
+.history-chart {
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafcff;
+}
+
+.history-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.hist-axis {
+  stroke: #ccd4e3;
+  stroke-width: 1;
+}
+
+.hist-bar {
+  fill: #8bb8db;
+  opacity: 0.9;
+}
+
+.hist-line {
+  stroke: #125f91;
+  stroke-width: 2;
+}
+
+.hist-dot {
+  fill: #125f91;
+}
+
+.hist-label {
+  fill: #5b6475;
+  font-size: 12px;
+}
+
+.hist-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.legend-swatch.bar {
+  background: #8bb8db;
+}
+
+.legend-swatch.line {
+  background: #125f91;
+}
+
+.chart-empty {
+  margin: 6px 0;
+  color: var(--muted);
 }
 
 @media (max-width: 700px) {
