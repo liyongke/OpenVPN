@@ -16,12 +16,14 @@ class LiveStateCollector:
         poll_interval_seconds: float = 2.0,
         history_store: HistoryStore | None = None,
         history_sample_seconds: int = 60,
+        device_hints_file: str = "",
     ) -> None:
         self.status_files = status_files
         self.poll_interval_seconds = poll_interval_seconds
         self.history_store = history_store
         self.history_sample_seconds = max(10, history_sample_seconds)
-        self._latest_payload: dict[str, Any] = load_openvpn_status_multi(status_files)
+        self.device_hints_file = device_hints_file
+        self._latest_payload: dict[str, Any] = load_openvpn_status_multi(status_files, device_hints_file=device_hints_file)
         self._latest_payload["live_source"] = "status_file"
         self._subscribers: set[asyncio.Queue[str]] = set()
         self._task: asyncio.Task[None] | None = None
@@ -56,7 +58,7 @@ class LiveStateCollector:
     async def _run(self) -> None:
         while not self._stop_event.is_set():
             now_utc = datetime.now(timezone.utc)
-            next_payload = load_openvpn_status_multi(self.status_files)
+            next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
             next_payload["live_source"] = "status_file"
             payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
 

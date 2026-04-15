@@ -18,9 +18,10 @@ app = FastAPI(title=settings.title)
 history_store = HistoryStore(settings.history_db_path, retention_days=settings.history_retention_days)
 collector = LiveStateCollector(
     settings.status_files,
-    poll_interval_seconds=2.0,
+    poll_interval_seconds=max(0.5, settings.live_poll_seconds),
     history_store=history_store,
     history_sample_seconds=settings.history_sample_seconds,
+    device_hints_file=settings.device_hints_file,
 )
 
 base_dir = Path(__file__).resolve().parent

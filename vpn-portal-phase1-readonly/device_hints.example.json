@@ -1,0 +1,20 @@
+{
+  "users": {
+    "client-openvpn": {
+      "device_type": "pc",
+      "device_platform": "mac"
+    }
+  },
+  "common_names": {
+    "iphone-main": {
+      "device_type": "phone",
+      "device_platform": "ios"
+    }
+  },
+  "real_addresses": {
+    "203.0.113.10": {
+      "device_type": "phone",
+      "device_platform": "android"
+    }
+  }
+}

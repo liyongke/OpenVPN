@@ -1,4 +1,4 @@
-# VPN Portal Phase 1 (Read-Only)
+# VPN Portal Phase 2 (Read-Only Ops)
 
 This folder contains an isolated portal MVP that does not modify OpenVPN service state.
 
@@ -19,6 +19,11 @@ This folder contains an isolated portal MVP that does not modify OpenVPN service
 - Status Source panel shows configured status files once, with per-source protocol/session details and links to the status viewer.
 - Per-session protocol (TCP/UDP) and device hints (phone/pc/unknown).
 - History panel is placed at the bottom of the dashboard for cleaner top-level monitoring.
+
+Device identification note:
+- OpenVPN status files do not include a reliable phone/pc field by default.
+- The portal uses best-effort inference from usernames/common names.
+- For accurate labels, provide a device hints file (see `device_hints.example.json`).
 
 ## What it does not do yet
 
@@ -68,7 +73,9 @@ Environment variables:
 - PORTAL_HISTORY_DB default: /home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
 - PORTAL_HISTORY_RETENTION_DAYS default: 7
 - PORTAL_HISTORY_SAMPLE_SECONDS default: 60
-- PORTAL_TITLE default: OpenVPN Portal Phase 1 (Read-Only)
+- PORTAL_LIVE_POLL_SECONDS default: 1.0
+- PORTAL_DEVICE_HINTS_FILE default: /home/ec2-user/apps/vpn-portal-phase1-readonly/device_hints.json
+- PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
 
 ## Notes for your existing deployment
 
@@ -76,6 +83,13 @@ Environment variables:
 - OPENVPN_STATUS_FILE is still supported, but only for single-file setups.
 - If no status file exists, the UI still runs and reports status source missing.
 - History is sampled periodically from live snapshots and kept for 7 days by default.
+- For lower latency, tune both portal and OpenVPN:
+   - `PORTAL_LIVE_POLL_SECONDS=1.0` (or 0.5)
+   - OpenVPN `status` directive interval (for example `status /var/log/openvpn/status-tcp.log 2`)
+
+Device hints file format:
+- Copy `device_hints.example.json` to your deployment path and edit values.
+- Sections supported: `users`, `common_names`, `real_addresses`.
 
 EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.

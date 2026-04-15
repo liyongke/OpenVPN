@@ -4,12 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Status File - {{ title }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/openvpn-icon.svg">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <main class="container">
     <header class="top">
-      <h1>Status File Viewer</h1>
+      <div class="brand-title">
+        <img class="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon">
+        <h1>Status File Viewer</h1>
+      </div>
       <p class="sub">Showing the latest lines from a selected OpenVPN status source.</p>
       <p><a href="/">Back to dashboard</a></p>
     </header>

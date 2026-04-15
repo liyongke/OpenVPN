@@ -29,6 +29,19 @@ body {
   font-size: 2rem;
 }
 
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  filter: drop-shadow(0 2px 3px rgba(10, 20, 40, 0.12));
+}
+
 .sub {
   margin-top: 8px;
   color: var(--muted);
@@ -232,6 +245,12 @@ th {
 
   .top h1 {
     font-size: 1.5rem;
+  }
+
+  .brand-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
   }
 
   .status-meta {

@@ -16,6 +16,8 @@ class Settings:
     history_db_path: str
     history_retention_days: int
     history_sample_seconds: int
+    live_poll_seconds: float
+    device_hints_file: str
 
 
 def _detect_status_file() -> str:
@@ -67,11 +69,13 @@ def load_settings() -> Settings:
     return Settings(
         host=os.getenv("PORTAL_HOST", "127.0.0.1"),
         port=int(os.getenv("PORTAL_PORT", "8088")),
-        title=os.getenv("PORTAL_TITLE", "OpenVPN Portal Phase 1 (Read-Only)"),
+        title=os.getenv("PORTAL_TITLE", "OpenVPN Portal Phase 2 (Read-Only Ops)"),
         status_files=status_files,
         status_file=status_files[0] if status_files else _detect_status_file(),
         log_file=os.getenv("OPENVPN_LOG_FILE", "/var/log/openvpn/openvpn.log"),
         history_db_path=os.getenv("PORTAL_HISTORY_DB", "/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3"),
         history_retention_days=int(os.getenv("PORTAL_HISTORY_RETENTION_DAYS", "7")),
         history_sample_seconds=int(os.getenv("PORTAL_HISTORY_SAMPLE_SECONDS", "60")),
+        live_poll_seconds=float(os.getenv("PORTAL_LIVE_POLL_SECONDS", "1.0")),
+        device_hints_file=os.getenv("PORTAL_DEVICE_HINTS_FILE", "/home/ec2-user/apps/vpn-portal-phase1-readonly/device_hints.json"),
     )
