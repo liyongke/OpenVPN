@@ -33,6 +33,21 @@ Operate and debug safely with fast root-cause isolation and low-risk changes.
 - Keep `client-connect` device-hints hook enabled when device labels are required.
 - Run `bash -n` checks for shell scripts before deployment.
 
+## Security Defaults
+
+Apply these rules by default in every task, doc edit, and code change:
+
+- Never hardcode real credentials, IPs, instance IDs, or access keys in docs or code.
+- Use placeholder values (`<instance-id>`, `<your-password>`, `$HOME`, etc.) in all examples.
+- Do not use personal local paths (`/Users/<name>/...`) in any committed file; use `$HOME` or relative paths.
+- Prefer `--cacert <ca.pem>` over `curl -k` in documented examples; note `-k` is only acceptable for local-loopback testing.
+- Pass credentials via variables loaded from a secure file, not as inline literal strings on the command line.
+- When writing workflow files, prefer GitHub OIDC + IAM role over long-lived static AWS key pairs.
+- When adding new secrets to workflows, list them as `${{ secrets.NAME }}` references only — never echo or print them.
+- Before recommending `git push --force`, always require a backup branch/tag and state the exact collaborator recovery command.
+- After any session that used inline credentials for testing, recommend credential rotation.
+- If any of the above rules would be violated by a user request, flag it explicitly before proceeding.
+
 ## Documentation Discipline
 
 When behavior changes, update these docs together when relevant:
