@@ -228,13 +228,6 @@ resource "aws_security_group" "vpn_sg" {
   name   = "openvpn-sg"
 
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Restrict to your IP in production
-  }
-
-  ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -246,6 +239,18 @@ resource "aws_security_group" "vpn_sg" {
     to_port     = 443
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"] # Restrict to your IP in production
+  }
+
+  dynamic "ingress" {
+    for_each = var.enable_portal_ingress ? var.portal_admin_cidrs : []
+
+    content {
+      description = "Admin portal ingress"
+      from_port   = var.portal_ingress_port
+      to_port     = var.portal_ingress_port
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+    }
   }
 
   egress {

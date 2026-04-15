@@ -28,8 +28,8 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 **Solution:** Run OpenVPN dual transport on port 443 with TCP as default and UDP as optional mode.
 
 - Protocol: OpenVPN TCP `443` (default) + UDP `443` (optional)
-- Server: EC2 `i-09e463ef599031fe7`, `ap-southeast-1`, IP `54.254.169.193`
-- Verified result: `curl ifconfig.me` on client returns `54.254.169.193` (all traffic egresses through EC2)
+- Server: EC2 in `ap-southeast-1` (resolve identifiers dynamically via Terraform/AWS CLI)
+- Verified result: `curl ifconfig.me` on client returns the value of `terraform output -raw vpn_server_public_ip`
 
 ---
 
@@ -39,7 +39,7 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 [ macOS / iPhone ]
         │  TCP 443 (default) / UDP 443 (optional)
         ▼
-[ EC2 54.254.169.193 ]
+[ EC2 <vpn_server_public_ip> ]
   tun0: 10.8.0.1 (UDP)
   tun1: 10.9.0.1 (TCP)
   openvpn@server-udp + openvpn@server-tcp
@@ -68,7 +68,7 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 |---|---|
 | `vpn.sh` | macOS helper — connect / disconnect / status / toggle / log |
 | `client-openvpn.ovpn` | Client profile; import on macOS or iPhone |
-| `openvpn_setup.sh` | Server bootstrap + profile generator; scp to EC2 and run |
+| `openvpn_setup.sh` | Server bootstrap + profile generator; run on EC2 via SSM |
 | `setup_openvpn_server.sh` | Earlier draft; kept for reference |
 | `main.tf` | Terraform EC2 + security-group definition |
 
@@ -78,20 +78,26 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 
 ### 4.1 Prerequisites
 
-- EC2 reachable via `openvpn-key.pem` or AWS Systems Manager (SSM)
-- Security group `sg-0ec3c5548c5af11d9` allows inbound TCP `443` from `0.0.0.0/0`
+- EC2 reachable via AWS Systems Manager (SSM)
+- Security group allows inbound TCP `443` and UDP `443` for VPN traffic
 - Outbound internet available on EC2
 
 ### 4.2 Run setup script
 
 ```bash
-# Upload and execute from local machine:
-scp -i openvpn-key.pem openvpn_setup.sh ec2-user@54.254.169.193:/home/ec2-user/
-ssh -i openvpn-key.pem ec2-user@54.254.169.193 \
-  'chmod +x openvpn_setup.sh && ./openvpn_setup.sh 54.254.169.193'
+# Resolve target values:
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+VPN_IP="$(terraform output -raw vpn_server_public_ip)"
 
-# Download generated client profile:
-scp -i openvpn-key.pem ec2-user@54.254.169.193:/home/ec2-user/client-openvpn.ovpn ./
+# Open an SSM shell session, upload/openvpn_setup.sh by your preferred secure method,
+# then run it directly on the instance:
+aws ssm start-session --target "$INSTANCE_ID"
+
+# In the SSM shell:
+#   chmod +x /home/ec2-user/openvpn_setup.sh
+#   /home/ec2-user/openvpn_setup.sh "$VPN_IP"
+
+# Retrieve generated profile through your approved secure channel (for example S3 + KMS).
 ```
 
 What `openvpn_setup.sh` does:
@@ -104,8 +110,10 @@ What `openvpn_setup.sh` does:
 ### 4.3 Verify server is running
 
 ```bash
-ssh -i openvpn-key.pem ec2-user@54.254.169.193 \
-  'sudo systemctl is-active openvpn@server-udp && sudo systemctl is-active openvpn@server-tcp && sudo ss -lnup | grep :443 && sudo ss -lntp | grep :443'
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl is-active openvpn@server-udp","sudo systemctl is-active openvpn@server-tcp","sudo ss -lnup | grep :443","sudo ss -lntp | grep :443"]}'
 ```
 
 Expected: `active` and a listener on `0.0.0.0:443`.
@@ -119,7 +127,7 @@ File: `client-openvpn.ovpn`
 ```ini
 dev tun
 proto tcp-client
-remote 54.254.169.193 443
+remote <vpn_server_public_ip> 443
 nobind
 persist-key
 persist-tun
@@ -185,7 +193,7 @@ Connecting…
 DNS pinned on Wi-Fi: 1.1.1.1 8.8.8.8
 Connected!
 ● VPN connected  (pid 12345)
-  Public IP : 54.254.169.193
+  Public IP : <vpn_server_public_ip>
   Log       : /tmp/openvpn-client.log
 ```
 
@@ -194,7 +202,7 @@ Connected!
 ```bash
 $ ./vpn.sh status
 ● VPN connected  (pid 12345)
-  Public IP : 54.254.169.193
+  Public IP : <vpn_server_public_ip>
 
 # After disconnect:
 ○ VPN disconnected
@@ -218,7 +226,7 @@ tail -f /tmp/openvpn-client.log
 # Look for: "Initialization Sequence Completed"
 
 # Verify traffic is routed through VPN
-curl ifconfig.me    # should return 54.254.169.193
+curl ifconfig.me    # should return <vpn_server_public_ip>
 
 # Disconnect
 sudo kill "$(cat /tmp/openvpn-client.pid)"
@@ -234,7 +242,7 @@ sudo kill "$(cat /tmp/openvpn-client.pid)"
 2. Transfer `client-openvpn.ovpn` to iPhone via AirDrop, Files app, or email.
 3. Tap the file — OpenVPN Connect will prompt to import the profile.
 4. Toggle the profile switch to connect.
-5. Verify: open a browser and check `ifconfig.me` — it should show `54.254.169.193`.
+5. Verify: open a browser and check `ifconfig.me` — it should show `<vpn_server_public_ip>`.
 
 > **Note:** If iPhone still fails after updates, remove old imported profile and re-import the latest `.ovpn` file.
 
@@ -368,26 +376,13 @@ sudo iptables -t nat -A POSTROUTING -s 10.9.0.0/24 -o <iface> -j MASQUERADE
 ### Server
 
 ```bash
-# SSH in
-ssh -i openvpn-key.pem ec2-user@54.254.169.193
+# Resolve instance and run checks through SSM
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
 
-# Service status
-sudo systemctl status openvpn@server-udp --no-pager
-sudo systemctl status openvpn@server-tcp --no-pager
-
-# Recent logs
-sudo journalctl -u openvpn@server-udp -n 50 --no-pager
-sudo journalctl -u openvpn@server-tcp -n 50 --no-pager
-
-# Confirm port 443 is listening
-sudo ss -lntp | grep :443
-
-# Active tunnel interfaces
-sudo ip addr show tun0
-sudo ip addr show tun1
-
-# NAT rules (should see MASQUERADE)
-sudo iptables -t nat -L POSTROUTING -n -v
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl status openvpn@server-udp --no-pager","sudo systemctl status openvpn@server-tcp --no-pager","sudo journalctl -u openvpn@server-udp -n 50 --no-pager","sudo journalctl -u openvpn@server-tcp -n 50 --no-pager","sudo ss -lntp | grep :443","sudo ip addr show tun0","sudo ip addr show tun1","sudo iptables -t nat -L POSTROUTING -n -v"]}'
 ```
 
 ### Client (macOS)
@@ -403,7 +398,7 @@ sudo iptables -t nat -L POSTROUTING -n -v
 tail -n 50 /tmp/openvpn-client.log
 
 # Verify traffic is routed through VPN
-curl ifconfig.me          # expect 54.254.169.193
+curl ifconfig.me          # expect <vpn_server_public_ip>
 
 # DNS check (should resolve via tunnel DNS, not local router)
 nslookup youtube.com      # expect non-192.168.x.x resolver
@@ -416,8 +411,8 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 - **Profile files contain private client keys.** Keep them `chmod 600` and never commit to a public repository.
 - **Rotate client credentials** if a profile is shared/lost: regenerate client cert/key and redistribute updated profile.
 - **Rotate server credentials** if compromise is suspected: regenerate server cert/key and `ta.key`, then redistribute fresh profiles.
-- **`openvpn-key.pem`** gives SSH access to the EC2 instance. Keep it `chmod 400`.
-- Security group `sg-0ec3c5548c5af11d9` allows TCP 443 from `0.0.0.0/0`. Restricting to your known IP ranges improves posture if static IPs are available.
+- Prefer AWS Systems Manager Session Manager over SSH for administration.
+- Keep admin portal ingress restricted to explicit `/32` IP allowlists.
 
 ---
 
@@ -432,12 +427,13 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 tail -30 /tmp/openvpn-client.log
 
 # 2. Confirm server is alive and listening
-curl --max-time 5 -s "http://54.254.169.193:443" || echo "port open (connection refused = good)"
+curl --max-time 5 -s "http://$(terraform output -raw vpn_server_public_ip):443" || echo "port open (connection refused = good)"
 
-# 3. Re-run setup to regenerate server + profile if needed
-scp -i openvpn-key.pem openvpn_setup.sh ec2-user@54.254.169.193:~/
-ssh -i openvpn-key.pem ec2-user@54.254.169.193 './openvpn_setup.sh 54.254.169.193'
-scp -i openvpn-key.pem ec2-user@54.254.169.193:~/client-openvpn.ovpn ./
+# 3. Re-run setup via SSM if needed
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+VPN_IP="$(terraform output -raw vpn_server_public_ip)"
+aws ssm start-session --target "$INSTANCE_ID"
+# Then in session: /home/ec2-user/openvpn_setup.sh "$VPN_IP"
 
 # 4. Reconnect
 ./vpn.sh connect
@@ -447,10 +443,7 @@ scp -i openvpn-key.pem ec2-user@54.254.169.193:~/client-openvpn.ovpn ./
 
 ```bash
 # Get new IP
-eval "$(aws configure export-credentials --profile default --format env)"
-NEW_IP=$(aws ec2 describe-instances --region ap-southeast-1 \
-  --instance-ids i-09e463ef599031fe7 \
-  --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+NEW_IP="$(terraform output -raw vpn_server_public_ip)"
 echo "New IP: $NEW_IP"
 
 # Update client profile
@@ -463,8 +456,9 @@ sed -i '' "s/remote .* 443/remote $NEW_IP 443/" client-openvpn.ovpn
 ### Service not running on server
 
 ```bash
-ssh -i openvpn-key.pem ec2-user@54.254.169.193 \
-  'sudo systemctl restart openvpn@server-udp openvpn@server-tcp && \
-   sudo systemctl status openvpn@server-udp --no-pager && \
-   sudo systemctl status openvpn@server-tcp --no-pager'
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl restart openvpn@server-udp openvpn@server-tcp","sudo systemctl status openvpn@server-udp --no-pager","sudo systemctl status openvpn@server-tcp --no-pager"]}'
 ```

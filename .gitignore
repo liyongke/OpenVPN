@@ -3,6 +3,8 @@
 .terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.*
+terraform.tfvars
+*.auto.tfvars
 *.tfplan
 tfplan
 tfplan_*
@@ -16,6 +18,11 @@ tfplan_*
 # Local runtime artifacts
 *.log
 *.pid
+.python-venv/
+.venv/
+__pycache__/
+*.pyc
+portal_credentials.txt
 
 # Archives and local bundles
 *.zip

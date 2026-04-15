@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and customize for your environment.
+
+enable_portal_ingress = true
+portal_ingress_port   = 9443
+portal_admin_cidrs    = ["<your-public-ip>/32"]
+
+# Optional cost alerts
+# enable_monthly_budget_alert    = true
+# monthly_budget_limit_usd       = 10
+# budget_alert_threshold_percent = 80
+# budget_alert_email             = "you@example.com"

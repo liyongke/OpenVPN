@@ -51,7 +51,8 @@ Default protocol note:
 ### Verify the VPN is working
 
 ```bash
-curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
+curl ifconfig.me        # should return your VPN server public IP
+terraform output -raw vpn_server_public_ip
 ```
 
 ---
@@ -60,12 +61,12 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 
 | Resource | Value |
 |---|---|
-| EC2 Instance | `i-09e463ef599031fe7` |
-| Public IP | `54.254.169.193` |
+| EC2 Instance | Use `aws ec2 describe-instances` or SSM inventory |
+| Public IP | Use `terraform output -raw vpn_server_public_ip` |
 | Region | `ap-southeast-1` (Singapore) |
 | Protocol | OpenVPN, TCP 443 default + UDP 443 optional |
 | Tunnel | UDP `10.8.0.0/24`, TCP `10.9.0.0/24` |
-| SSH Key | `openvpn-key.pem` |
+| Admin Access | AWS Systems Manager Session Manager (SSM) |
 
 ---
 
@@ -108,6 +109,63 @@ For dual transport, UDP and TCP server daemons must use different VPN subnets (f
 
 ---
 
+## Admin Portal
+
+- Public URL output: `terraform output portal_admin_url`
+- Current design: Nginx on `9443` with IP allowlist + HTTP Basic Auth
+- Backend app binds only to `127.0.0.1:8088`
+
+Security notes:
+- Store portal credentials in a password manager.
+- Rotate credentials periodically and after any device compromise.
+- Keep `portal_admin_cidrs` as tight `/32` values.
+
+Credential rotation (SSM-only):
+
+```bash
+chmod +x scripts/rotate_portal_password_ssm.sh
+./scripts/rotate_portal_password_ssm.sh
+```
+
+This updates Nginx Basic Auth on EC2 and refreshes local `portal_credentials.txt`.
+
+SSM-first operations:
+
+```bash
+aws ssm start-session --target <instance-id>
+```
+
+Optional non-interactive command execution:
+
+```bash
+aws ssm send-command \
+  --instance-ids <instance-id> \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl status openvpn@server-tcp --no-pager"]}'
+```
+
+### Admin Checklist
+
+Run these checks regularly:
+
+```bash
+# 1) Confirm VPN and portal services are up (SSM)
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx"]}'
+
+# 2) Confirm portal auth protection
+PORTAL_URL="$(terraform output -raw portal_admin_url)"
+curl -k -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PORTAL_URL/healthz"
+
+# 3) Rotate portal credential when needed
+./scripts/rotate_portal_password_ssm.sh
+```
+
+---
+
 ## Manual Commands (without vpn.sh)
 
 ```bash
@@ -131,7 +189,6 @@ sudo kill "$(cat /tmp/openvpn-client.pid)"
 
 ```bash
 brew install openvpn       # install OpenVPN client
-chmod 600 openvpn-key.pem
 chmod +x vpn.sh
 
 # AWS auth for Terraform (no eval needed)
@@ -158,6 +215,12 @@ budget_alert_threshold_percent = 80
 budget_alert_email            = "you@example.com"
 ```
 
+Or copy from template:
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
 Then apply:
 
 ```bash
@@ -176,6 +239,32 @@ terraform output vpc_flow_log_id
 In AWS Console:
 - CloudWatch Logs -> look for `/aws/vpc/flow-logs/<vpc-id>`
 - Budgets -> verify `openvpn-monthly-budget` (if enabled)
+
+### Persist Portal Ingress (IaC)
+
+To persist portal exposure rules (port `9443`) in Terraform instead of manual AWS console/CLI changes:
+
+```hcl
+enable_portal_ingress = true
+portal_ingress_port   = 9443
+portal_admin_cidrs    = ["<your-public-ip>/32"]
+```
+
+Then apply:
+
+```bash
+terraform plan
+terraform apply
+```
+
+Show resulting URL:
+
+```bash
+terraform output portal_admin_url
+```
+
+Note:
+- Keep `portal_admin_cidrs` as specific `/32` admin IPs; do not use `0.0.0.0/0`.
 
 ### Notes on Cost
 

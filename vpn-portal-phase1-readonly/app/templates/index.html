@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="container">
+    <header class="top">
+      <h1>{{ title }}</h1>
+      <p class="sub">Phase 1 is read-only. No control actions are executed from this portal.</p>
+    </header>
+
+    <section class="cards">
+      <article class="card">
+        <h2>Active Clients</h2>
+        <p class="metric">{{ payload.summary.active_clients }}</p>
+      </article>
+      <article class="card">
+        <h2>Total Download</h2>
+        <p class="metric">{{ payload.summary.total_mib_received }} MiB</p>
+      </article>
+      <article class="card">
+        <h2>Total Upload</h2>
+        <p class="metric">{{ payload.summary.total_mib_sent }} MiB</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Status Source</h2>
+      <p>Status file: {{ payload.status_file }}</p>
+      <p>Exists: {{ payload.status_exists }}</p>
+      <p>Updated at: {{ payload.updated_at if payload.updated_at else 'n/a' }}</p>
+      <p>Rendered at: {{ payload.generated_at }}</p>
+    </section>
+
+    <section class="panel">
+      <h2>Active Sessions</h2>
+      {% if payload.sessions %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Common Name</th>
+              <th>Real Address</th>
+              <th>Virtual Address</th>
+              <th>Download (MiB)</th>
+              <th>Upload (MiB)</th>
+              <th>Connected Since</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in payload.sessions %}
+            <tr>
+              <td>{{ session.username }}</td>
+              <td>{{ session.common_name }}</td>
+              <td>{{ session.real_address }}</td>
+              <td>{{ session.virtual_address }}</td>
+              <td>{{ session.mib_received }}</td>
+              <td>{{ session.mib_sent }}</td>
+              <td>{{ session.connected_since }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>No active sessions found in status file.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Usage by User (Current Snapshot)</h2>
+      {% if payload.summary.user_usage %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Sessions</th>
+              <th>Download (MiB)</th>
+              <th>Upload (MiB)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in payload.summary.user_usage %}
+            <tr>
+              <td>{{ user.username }}</td>
+              <td>{{ user.session_count }}</td>
+              <td>{{ user.mib_received }}</td>
+              <td>{{ user.mib_sent }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>No user usage available from current status snapshot.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

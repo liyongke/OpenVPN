@@ -37,3 +37,8 @@ output "budget_alert_name" {
   description = "Budget alert resource name (if enabled)"
   value       = var.enable_monthly_budget_alert && var.budget_alert_email != "" ? aws_budgets_budget.monthly_cost_budget[0].name : null
 }
+
+output "portal_admin_url" {
+  description = "Admin portal URL when portal ingress is enabled"
+  value       = var.enable_portal_ingress ? "https://${aws_instance.openvpn_server.public_ip}:${var.portal_ingress_port}" : null
+}
