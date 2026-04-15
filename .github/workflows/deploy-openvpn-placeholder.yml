@@ -1,0 +1,36 @@
+name: Deploy OpenVPN (Placeholder)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-placeholder:
+    name: Placeholder only (no deployment yet)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain placeholder behavior
+        run: |
+          echo "This workflow is a placeholder."
+          echo "No deployment is executed yet."
+          echo "When ready, replace placeholder steps with real deploy steps."
+
+      - name: Future deploy requirements (reference)
+        run: |
+          echo "Required repo secrets (planned):"
+          echo "- AWS_ACCESS_KEY_ID"
+          echo "- AWS_SECRET_ACCESS_KEY"
+          echo "- AWS_REGION"
+          echo "- EC2_INSTANCE_ID"
+          echo "- ARTIFACT_S3_URI"
+          echo ""
+          echo "Typical rollout sequence (planned):"
+          echo "1) Build/package portal artifact"
+          echo "2) Upload artifact to S3"
+          echo "3) Use AWS SSM send-command to deploy on EC2"
+          echo "4) Run health checks and rollback on failure"

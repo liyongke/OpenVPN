@@ -115,11 +115,16 @@ Server config consistency note:
 - **[AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)** — reusable AI prompts for incident triage, root-cause isolation, safe change execution, and regression guardrails.
 - **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — default Copilot behavior for this repository.
 - **[.github/prompts](.github/prompts)** — versioned prompt templates for common ops/debug workflows.
+- **[.github/workflows/deploy-openvpn-placeholder.yml](.github/workflows/deploy-openvpn-placeholder.yml)** — placeholder CI workflow that runs on push to `main` but does not deploy yet.
 
 AI prompt location note:
 - Repo copies live under `.github/prompts` and are shared through git.
 - One-click VS Code user prompts remain under `/Users/ryan/Library/Application Support/Code/User/prompts`.
 - Keep both in sync when prompt templates are updated.
+
+GitHub Actions deployment note:
+- The workflow in `.github/workflows/deploy-openvpn-placeholder.yml` is intentionally non-destructive.
+- Later, replace placeholder steps with real deployment commands (artifact upload, SSM rollout, post-checks, rollback).
 
 ---
 
