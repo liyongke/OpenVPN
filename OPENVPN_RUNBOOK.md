@@ -52,11 +52,12 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 | Transport | TCP `443` (default) + UDP `443` (optional) |
 | Tunnel (UDP) | `10.8.0.1` (server) ↔ `10.8.0.2` (client) |
 | Tunnel (TCP) | `10.9.0.1` (server) ↔ `10.9.0.2` (client) |
-| Cipher | `AES-256-CBC` |
+| Cipher | `AES-256-GCM` |
 | Auth | `SHA256` |
-| Key file | `/etc/openvpn/server/static.key` |
-| Config file | `/etc/openvpn/server/server.conf` |
+| TLS-crypt key file | `/etc/openvpn/ta.key` |
+| Server config files | `/etc/openvpn/server-tcp.conf`, `/etc/openvpn/server-udp.conf` |
 | systemd units | `openvpn@server-udp`, `openvpn@server-tcp` |
+| Status files | `/var/log/openvpn/status-tcp.log`, `/var/log/openvpn/status-udp.log` |
 | DNS (client) | `8.8.8.8`, `1.1.1.1` (forced through tunnel) |
 | MTU | `1500`, MSS fix `1400` (prevents TCP-over-TCP fragmentation) |
 
@@ -117,6 +118,20 @@ aws ssm send-command \
 ```
 
 Expected: `active` and a listener on `0.0.0.0:443`.
+
+Production note:
+- Keep `openvpn-server@server.service` disabled to avoid bind conflicts on `443`.
+- Ensure status logging remains enabled in both configs:
+
+```ini
+# /etc/openvpn/server-tcp.conf
+status /var/log/openvpn/status-tcp.log
+status-version 3
+
+# /etc/openvpn/server-udp.conf
+status /var/log/openvpn/status-udp.log
+status-version 3
+```
 
 ---
 
@@ -382,7 +397,7 @@ INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN
 aws ssm send-command \
   --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["sudo systemctl status openvpn@server-udp --no-pager","sudo systemctl status openvpn@server-tcp --no-pager","sudo journalctl -u openvpn@server-udp -n 50 --no-pager","sudo journalctl -u openvpn@server-tcp -n 50 --no-pager","sudo ss -lntp | grep :443","sudo ip addr show tun0","sudo ip addr show tun1","sudo iptables -t nat -L POSTROUTING -n -v"]}'
+  --parameters '{"commands":["sudo systemctl status openvpn@server-udp --no-pager","sudo systemctl status openvpn@server-tcp --no-pager","sudo systemctl is-enabled openvpn-server@server || true","sudo journalctl -u openvpn@server-udp -n 50 --no-pager","sudo journalctl -u openvpn@server-tcp -n 50 --no-pager","sudo grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","sudo grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf","sudo tail -n 20 /var/log/openvpn/status-tcp.log","sudo tail -n 20 /var/log/openvpn/status-udp.log","sudo ss -lntp | grep :443","sudo ip addr show tun0","sudo ip addr show tun1","sudo iptables -t nat -L POSTROUTING -n -v"]}'
 ```
 
 ### Client (macOS)

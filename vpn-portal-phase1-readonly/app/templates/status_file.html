@@ -10,7 +10,7 @@
   <main class="container">
     <header class="top">
       <h1>Status File Viewer</h1>
-      <p class="sub">Showing the latest lines from the configured OpenVPN status file.</p>
+      <p class="sub">Showing the latest lines from a selected OpenVPN status source.</p>
       <p><a href="/">Back to dashboard</a></p>
     </header>
 
@@ -19,6 +19,14 @@
       <p>Path: {{ status_file }}</p>
       <p>Exists: {{ payload.status_exists }}</p>
       <p>Updated at: {{ payload.updated_at if payload.updated_at else 'n/a' }}</p>
+      {% if payload.status_sources %}
+      <p>Switch source:</p>
+      <div class="source-list">
+        {% for source in payload.status_sources %}
+        <p><a href="/status-file?file={{ source.path | urlencode }}">{{ source.path }}</a> | protocol={{ source.protocol }} | sessions={{ source.session_count }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% if read_error %}
       <p class="error">{{ read_error }}</p>
       {% endif %}

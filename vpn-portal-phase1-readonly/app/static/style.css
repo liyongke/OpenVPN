@@ -41,6 +41,11 @@ body {
   gap: 14px;
 }
 
+.cards-sub {
+  margin-top: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
 .card,
 .panel {
   background: var(--panel);
@@ -66,6 +71,16 @@ body {
   font-weight: 700;
 }
 
+.metric.small {
+  font-size: 1.1rem;
+}
+
+.hint {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+
 .panel {
   margin-top: 14px;
   padding: 16px;
@@ -73,6 +88,23 @@ body {
 
 .panel h2 {
   margin-top: 0;
+}
+
+.source-list p {
+  margin: 6px 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.status-meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.status-meta p {
+  margin: 0;
 }
 
 .panel a {
@@ -200,5 +232,10 @@ th {
 
   .top h1 {
     font-size: 1.5rem;
+  }
+
+  .status-meta {
+    display: grid;
+    gap: 6px;
   }
 }

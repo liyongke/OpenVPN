@@ -114,8 +114,8 @@ For dual transport, UDP and TCP server daemons must use different VPN subnets (f
 - Public URL output: `terraform output portal_admin_url`
 - Current design: Nginx on `9443` with IP allowlist + HTTP Basic Auth
 - Backend app binds only to `127.0.0.1:8088`
-- Live dashboard includes current sessions/usage plus a 7-day history chart
-- Status file path is clickable in UI and opens a read-only status file viewer
+- Live dashboard shows summary/status/sessions first, with 7-day history moved to the bottom
+- Status Source panel lists each configured status file once and links each source to the read-only status file viewer
 
 Security notes:
 - Store portal credentials in a password manager.
@@ -156,7 +156,7 @@ INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN
 aws ssm send-command \
   --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx"]}'
+  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx","systemctl is-enabled openvpn-server@server || true","grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf","tail -n 10 /var/log/openvpn/status-tcp.log","tail -n 10 /var/log/openvpn/status-udp.log"]}'
 
 # 2) Confirm portal auth protection
 PORTAL_URL="$(terraform output -raw portal_admin_url)"
@@ -166,10 +166,16 @@ curl -k -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PORTAL_URL/healthz"
 read -r PORTAL_USER PORTAL_PASS < <(awk -F': ' '/^username:/{u=$2} /^password:/{p=$2} END{print u, p}' portal_credentials.txt)
 curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/history/7d" | head -c 220 && echo
 curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" -o /dev/null -w 'status-file:%{http_code}\n' "$PORTAL_URL/status-file"
+curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/live/summary" | head -c 420 && echo
 
 # 3) Rotate portal credential when needed
 ./scripts/rotate_portal_password_ssm.sh
 ```
+
+Portal runtime note:
+- Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env`.
+- `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
+- Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
 
 ---
 

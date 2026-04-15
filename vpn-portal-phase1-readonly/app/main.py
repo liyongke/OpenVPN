@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,7 +17,7 @@ settings = load_settings()
 app = FastAPI(title=settings.title)
 history_store = HistoryStore(settings.history_db_path, retention_days=settings.history_retention_days)
 collector = LiveStateCollector(
-    settings.status_file,
+    settings.status_files,
     poll_interval_seconds=2.0,
     history_store=history_store,
     history_sample_seconds=settings.history_sample_seconds,
@@ -45,7 +45,7 @@ def healthz() -> dict[str, str]:
 
 @app.get("/api/sessions")
 def api_sessions() -> JSONResponse:
-    payload = load_openvpn_status(settings.status_file)
+    payload = collector.latest_payload
     return JSONResponse(payload)
 
 
@@ -89,8 +89,25 @@ async def api_live_sessions() -> StreamingResponse:
 
 
 @app.get("/status-file")
-def status_file_view(request: Request) -> HTMLResponse:
-    status_path = Path(settings.status_file)
+def status_file_view(request: Request, file: str | None = Query(default=None)) -> HTMLResponse:
+    payload = collector.latest_payload
+
+    default_source = ""
+    for source in payload.get("status_sources", []):
+        source_path = str(source.get("path", "")).strip()
+        if source_path:
+            default_source = source_path
+            if bool(source.get("exists")):
+                break
+
+    if not default_source:
+        if settings.status_files:
+            default_source = settings.status_files[0]
+        elif settings.status_file:
+            default_source = settings.status_file.split(",", 1)[0].strip()
+
+    selected = file if file else default_source
+    status_path = Path(selected)
     raw_text = ""
     read_error = ""
 
@@ -103,13 +120,12 @@ def status_file_view(request: Request) -> HTMLResponse:
     except (PermissionError, OSError) as exc:
         read_error = f"Unable to read status file: {exc}"
 
-    payload = collector.latest_payload
     return templates.TemplateResponse(
         request=request,
         name="status_file.html",
         context={
             "title": settings.title,
-            "status_file": settings.status_file,
+            "status_file": selected,
             "read_error": read_error,
             "raw_text": raw_text,
             "payload": payload,

@@ -6,22 +6,22 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.history_store import HistoryStore
-from app.services.openvpn_reader import load_openvpn_status
+from app.services.openvpn_reader import load_openvpn_status_multi
 
 
 class LiveStateCollector:
     def __init__(
         self,
-        status_file: str,
+        status_files: list[str],
         poll_interval_seconds: float = 2.0,
         history_store: HistoryStore | None = None,
         history_sample_seconds: int = 60,
     ) -> None:
-        self.status_file = status_file
+        self.status_files = status_files
         self.poll_interval_seconds = poll_interval_seconds
         self.history_store = history_store
         self.history_sample_seconds = max(10, history_sample_seconds)
-        self._latest_payload: dict[str, Any] = load_openvpn_status(status_file)
+        self._latest_payload: dict[str, Any] = load_openvpn_status_multi(status_files)
         self._latest_payload["live_source"] = "status_file"
         self._subscribers: set[asyncio.Queue[str]] = set()
         self._task: asyncio.Task[None] | None = None
@@ -56,7 +56,7 @@ class LiveStateCollector:
     async def _run(self) -> None:
         while not self._stop_event.is_set():
             now_utc = datetime.now(timezone.utc)
-            next_payload = load_openvpn_status(self.status_file)
+            next_payload = load_openvpn_status_multi(self.status_files)
             next_payload["live_source"] = "status_file"
             payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
 

@@ -13,7 +13,7 @@
       <p class="sub">Phase 1 is read-only. No control actions are executed from this portal.</p>
     </header>
 
-    <section class="cards">
+    <section class="cards cards-main">
       <article class="card">
         <h2>Active Clients</h2>
         <p class="metric" id="metric-active">{{ payload.summary.active_clients }}</p>
@@ -26,38 +26,36 @@
         <h2>Total Upload</h2>
         <p class="metric" id="metric-upload">{{ payload.summary.total_mib_sent }} MiB</p>
       </article>
+      <article class="card">
+        <h2>Transport</h2>
+        <p class="metric small" id="metric-protocol">TCP {{ payload.summary.protocol_breakdown.tcp if payload.summary.protocol_breakdown else 0 }} / UDP {{ payload.summary.protocol_breakdown.udp if payload.summary.protocol_breakdown else 0 }}</p>
+      </article>
+    </section>
+
+    <section class="cards cards-sub">
+      <article class="card">
+        <h2>Device Mix</h2>
+        <p class="metric small" id="metric-device">Phone {{ payload.summary.device_breakdown.phone if payload.summary.device_breakdown else 0 }} / PC {{ payload.summary.device_breakdown.pc if payload.summary.device_breakdown else 0 }} / Unknown {{ payload.summary.device_breakdown.unknown if payload.summary.device_breakdown else 0 }}</p>
+        <p class="hint">Derived from client/common-name hints; unknown means OpenVPN status data did not identify device type.</p>
+      </article>
     </section>
 
     <section class="panel">
       <h2>Status Source</h2>
-      <p>Status file: <a id="status-file-link" href="/status-file"><span id="status-file">{{ payload.status_file }}</span></a></p>
-      <p>Exists: <span id="status-exists">{{ payload.status_exists }}</span></p>
-      <p>Updated at: <span id="status-updated">{{ payload.updated_at if payload.updated_at else 'n/a' }}</span></p>
-      <p>Rendered at: <span id="status-rendered">{{ payload.generated_at }}</span></p>
-    </section>
-
-    <section class="panel">
-      <h2>History (Last 7 Days)</h2>
-      <div id="history-chart" class="history-chart" aria-label="7 day history chart"></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Day (UTC)</th>
-              <th>Samples</th>
-              <th>Peak Active</th>
-              <th>Avg Active</th>
-              <th>Max Download Snapshot (MiB)</th>
-              <th>Max Upload Snapshot (MiB)</th>
-              <th>Last Sample</th>
-            </tr>
-          </thead>
-          <tbody id="history-body">
-            <tr>
-              <td colspan="7">Collecting history data...</td>
-            </tr>
-          </tbody>
-        </table>
+      <p class="hint">Live data is merged from all configured OpenVPN status sources below.</p>
+      <div class="status-meta">
+        <p>Exists: <span id="status-exists">{{ payload.status_exists }}</span></p>
+        <p>Updated at: <span id="status-updated">{{ payload.updated_at if payload.updated_at else 'n/a' }}</span></p>
+        <p>Rendered at: <span id="status-rendered">{{ payload.generated_at }}</span></p>
+      </div>
+      <div class="source-list" id="source-list">
+        {% if payload.status_sources %}
+          {% for source in payload.status_sources %}
+          <p><a href="/status-file?file={{ source.path }}">{{ source.path }}</a> | protocol={{ source.protocol }} | exists={{ source.exists }} | sessions={{ source.session_count }}</p>
+          {% endfor %}
+        {% else %}
+          <p>No status sources are configured.</p>
+        {% endif %}
       </div>
     </section>
 
@@ -68,12 +66,16 @@
           <thead>
             <tr>
               <th>User</th>
+              <th>Device</th>
+              <th>Platform</th>
+              <th>Protocol</th>
               <th>Common Name</th>
               <th>Real Address</th>
               <th>Virtual Address</th>
               <th>Download (MiB)</th>
               <th>Upload (MiB)</th>
               <th>Connected Since</th>
+              <th>Connected (min)</th>
             </tr>
           </thead>
           <tbody id="sessions-body">
@@ -81,17 +83,21 @@
             {% for session in payload.sessions %}
             <tr>
               <td>{{ session.username }}</td>
+              <td>{{ session.device_type }}</td>
+              <td>{{ session.device_platform }}</td>
+              <td>{{ session.protocol }}</td>
               <td>{{ session.common_name }}</td>
               <td>{{ session.real_address }}</td>
               <td>{{ session.virtual_address }}</td>
               <td>{{ session.mib_received }}</td>
               <td>{{ session.mib_sent }}</td>
               <td>{{ session.connected_since }}</td>
+              <td>{{ session.connected_for_minutes if session.connected_for_minutes is not none else 'n/a' }}</td>
             </tr>
             {% endfor %}
             {% else %}
             <tr>
-              <td colspan="7">No active sessions found in status file.</td>
+              <td colspan="11">No active sessions found in status file.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -130,6 +136,31 @@
         </table>
       </div>
     </section>
+
+    <section class="panel">
+      <h2>History (Last 7 Days)</h2>
+      <div id="history-chart" class="history-chart" aria-label="7 day history chart"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Day (UTC)</th>
+              <th>Samples</th>
+              <th>Peak Active</th>
+              <th>Avg Active</th>
+              <th>Max Download Snapshot (MiB)</th>
+              <th>Max Upload Snapshot (MiB)</th>
+              <th>Last Sample</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr>
+              <td colspan="7">Collecting history data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
   <script>
     const byId = (id) => document.getElementById(id);
@@ -146,19 +177,23 @@
       if (!body) return;
 
       if (!sessions || sessions.length === 0) {
-        body.innerHTML = '<tr><td colspan="7">No active sessions found in status file.</td></tr>';
+        body.innerHTML = '<tr><td colspan="11">No active sessions found in status file.</td></tr>';
         return;
       }
 
       body.innerHTML = sessions.map((s) => `
         <tr>
           <td>${s.username}</td>
+          <td>${s.device_type || 'unknown'}</td>
+          <td>${s.device_platform || 'unknown'}</td>
+          <td>${s.protocol || 'unknown'}</td>
           <td>${s.common_name}</td>
           <td>${s.real_address}</td>
           <td>${s.virtual_address || ''}</td>
           <td>${s.mib_received}</td>
           <td>${s.mib_sent}</td>
           <td>${s.connected_since}</td>
+          <td>${s.connected_for_minutes === null || s.connected_for_minutes === undefined ? 'n/a' : s.connected_for_minutes}</td>
         </tr>
       `).join("");
     }
@@ -186,11 +221,34 @@
       setText("metric-active", payload.summary.active_clients);
       setText("metric-download", `${payload.summary.total_mib_received} MiB`);
       setText("metric-upload", `${payload.summary.total_mib_sent} MiB`);
+      const proto = payload.summary.protocol_breakdown || { tcp: 0, udp: 0 };
+      setText("metric-protocol", `TCP ${proto.tcp || 0} / UDP ${proto.udp || 0}`);
+      const dev = payload.summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
+      setText("metric-device", `Phone ${dev.phone || 0} / PC ${dev.pc || 0} / Unknown ${dev.unknown || 0}`);
 
-      setText("status-file", payload.status_file);
       setText("status-exists", String(payload.status_exists));
       setText("status-updated", payload.updated_at || "n/a");
       setText("status-rendered", payload.generated_at);
+
+      const sourceRoot = byId("source-list");
+      if (sourceRoot) {
+        const sources = payload.status_sources || [];
+        if (sources.length === 0) {
+          sourceRoot.innerHTML = `<p>No status sources are configured.</p>`;
+          renderSessions(payload.sessions || []);
+          renderUsage(payload.summary.user_usage || []);
+          return;
+        }
+
+        sourceRoot.innerHTML = sources.map((s) => `
+          <p>
+            <a href="/status-file?file=${encodeURIComponent(s.path)}">${s.path}</a>
+            | protocol=${s.protocol || 'unknown'}
+            | exists=${String(Boolean(s.exists))}
+            | sessions=${s.session_count || 0}
+          </p>
+        `).join("");
+      }
 
       renderSessions(payload.sessions || []);
       renderUsage(payload.summary.user_usage || []);
