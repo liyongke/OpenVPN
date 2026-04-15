@@ -114,6 +114,8 @@ For dual transport, UDP and TCP server daemons must use different VPN subnets (f
 - Public URL output: `terraform output portal_admin_url`
 - Current design: Nginx on `9443` with IP allowlist + HTTP Basic Auth
 - Backend app binds only to `127.0.0.1:8088`
+- Live dashboard includes current sessions/usage plus a 7-day history chart
+- Status file path is clickable in UI and opens a read-only status file viewer
 
 Security notes:
 - Store portal credentials in a password manager.
@@ -159,6 +161,11 @@ aws ssm send-command \
 # 2) Confirm portal auth protection
 PORTAL_URL="$(terraform output -raw portal_admin_url)"
 curl -k -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PORTAL_URL/healthz"
+
+# 2b) Confirm history and status viewer routes (with auth)
+read -r PORTAL_USER PORTAL_PASS < <(awk -F': ' '/^username:/{u=$2} /^password:/{p=$2} END{print u, p}' portal_credentials.txt)
+curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/history/7d" | head -c 220 && echo
+curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" -o /dev/null -w 'status-file:%{http_code}\n' "$PORTAL_URL/status-file"
 
 # 3) Rotate portal credential when needed
 ./scripts/rotate_portal_password_ssm.sh
