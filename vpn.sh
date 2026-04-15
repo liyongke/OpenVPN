@@ -8,11 +8,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_UDP="$SCRIPT_DIR/client-openvpn-udp.ovpn"
 CONFIG_TCP="$SCRIPT_DIR/client-openvpn-tcp.ovpn"
 CONFIG_LEGACY="$SCRIPT_DIR/client-openvpn.ovpn"
-OPENVPN="/opt/homebrew/sbin/openvpn"
-PID_FILE="/tmp/openvpn-client.pid"
-LOG_FILE="/tmp/openvpn-client.log"
-DNS_BACKUP_FILE="/tmp/vpn-sh-dns-backup"
-BYPASS_ROUTE_FILE="/tmp/vpn-sh-bypass-routes"
+
+OS_UNAME="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+IS_WINDOWS=0
+IS_MACOS=0
+
+case "$OS_UNAME" in
+  msys*|mingw*|cygwin*) IS_WINDOWS=1 ;;
+  darwin*) IS_MACOS=1 ;;
+esac
+
+TMP_BASE="${TMPDIR:-${TMP:-/tmp}}"
+OPENVPN=""
+PID_FILE="$TMP_BASE/openvpn-client.pid"
+LOG_FILE="$TMP_BASE/openvpn-client.log"
+DNS_BACKUP_FILE="$TMP_BASE/vpn-sh-dns-backup"
+BYPASS_ROUTE_FILE="$TMP_BASE/vpn-sh-bypass-routes"
 DEFAULT_PROTOCOL="tcp"
 
 VPN_DNS_SERVERS=("1.1.1.1" "8.8.8.8")
@@ -34,10 +45,62 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+run_privileged() {
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    "$@"
+  fi
+}
+
+resolve_openvpn_binary() {
+  local candidate=""
+
+  if [[ -n "${OPENVPN_BIN:-}" ]]; then
+    if [[ "$OPENVPN_BIN" == */* ]]; then
+      [[ -x "$OPENVPN_BIN" ]] && { OPENVPN="$OPENVPN_BIN"; return 0; }
+    elif command -v "$OPENVPN_BIN" >/dev/null 2>&1; then
+      OPENVPN="$(command -v "$OPENVPN_BIN")"
+      return 0
+    fi
+  fi
+
+  for candidate in \
+    "/opt/homebrew/sbin/openvpn" \
+    "/usr/local/sbin/openvpn" \
+    "/usr/sbin/openvpn" \
+    "openvpn" \
+    "openvpn.exe" \
+    "/c/Program Files/OpenVPN/bin/openvpn.exe" \
+    "/mnt/c/Program Files/OpenVPN/bin/openvpn.exe"; do
+    if [[ "$candidate" == */* ]]; then
+      if [[ -x "$candidate" ]]; then
+        OPENVPN="$candidate"
+        return 0
+      fi
+    elif command -v "$candidate" >/dev/null 2>&1; then
+      OPENVPN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 pid_is_openvpn() {
   local pid="$1"
   [[ -n "$pid" ]] || return 1
-  ps -p "$pid" -o command= 2>/dev/null | grep -q "openvpn"
+
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    powershell.exe -NoProfile -Command "\
+      \$p = Get-Process -Id $pid -ErrorAction SilentlyContinue; \
+      if (\$p -and \$p.ProcessName -match 'openvpn') { exit 0 } else { exit 1 }\
+    " >/dev/null 2>&1
+  else
+    ps -p "$pid" -o command= 2>/dev/null | grep -q "openvpn"
+  fi
 }
 
 find_openvpn_pid() {
@@ -53,7 +116,17 @@ find_openvpn_pid() {
   fi
 
   # Fallback: find any OpenVPN process using known client profiles.
-  pid="$(pgrep -f "openvpn.*client-openvpn" | head -n1 || true)"
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    pid="$(powershell.exe -NoProfile -Command "\
+      \$p = Get-CimInstance Win32_Process -Filter \"Name='openvpn.exe'\" | \
+      Where-Object { \$_.CommandLine -match 'client-openvpn' } | \
+      Select-Object -First 1 -ExpandProperty ProcessId; \
+      if (\$p) { Write-Output \$p }\
+    " 2>/dev/null | tr -d '\r' | tr -d '[:space:]' || true)"
+  else
+    pid="$(pgrep -f "openvpn.*client-openvpn" | head -n1 || true)"
+  fi
+
   if pid_is_openvpn "$pid"; then
     echo "$pid"
     return 0
@@ -87,7 +160,7 @@ public_ip() {
 
 log_has() {
   local pattern="$1"
-  sudo grep -q "$pattern" "$LOG_FILE" 2>/dev/null
+  run_privileged grep -q "$pattern" "$LOG_FILE" 2>/dev/null
 }
 
 active_default_interface() {
@@ -123,11 +196,13 @@ active_network_service() {
 }
 
 flush_dns_cache() {
-  sudo dscacheutil -flushcache >/dev/null 2>&1 || true
-  sudo killall -HUP mDNSResponder >/dev/null 2>&1 || true
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
+  run_privileged dscacheutil -flushcache >/dev/null 2>&1 || true
+  run_privileged killall -HUP mDNSResponder >/dev/null 2>&1 || true
 }
 
 backup_dns_state() {
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
   local service="$1"
   local dns_raw=""
 
@@ -145,17 +220,19 @@ backup_dns_state() {
 }
 
 apply_vpn_dns() {
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
   local service=""
   service="$(active_network_service)"
 
   backup_dns_state "$service"
-  sudo networksetup -setdnsservers "$service" "${VPN_DNS_SERVERS[@]}" >/dev/null
+  run_privileged networksetup -setdnsservers "$service" "${VPN_DNS_SERVERS[@]}" >/dev/null
   flush_dns_cache
 
   echo -e "${CYAN}DNS pinned on ${service}: ${VPN_DNS_SERVERS[*]}${RESET}"
 }
 
 restore_dns_state() {
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
   [[ -f "$DNS_BACKUP_FILE" ]] || return 0
 
   local service=""
@@ -168,12 +245,12 @@ restore_dns_state() {
 
   if [[ -n "$service" ]]; then
     if [[ "$mode" == "AUTO" || -z "$dns_csv" ]]; then
-      sudo networksetup -setdnsservers "$service" Empty >/dev/null 2>&1 || true
+      run_privileged networksetup -setdnsservers "$service" Empty >/dev/null 2>&1 || true
       echo -e "${CYAN}DNS restored on ${service}: automatic${RESET}"
     else
       local dns_servers=()
       IFS=',' read -r -A dns_servers <<< "$dns_csv"
-      sudo networksetup -setdnsservers "$service" "${dns_servers[@]}" >/dev/null 2>&1 || true
+      run_privileged networksetup -setdnsservers "$service" "${dns_servers[@]}" >/dev/null 2>&1 || true
       echo -e "${CYAN}DNS restored on ${service}: ${dns_servers[*]}${RESET}"
     fi
     flush_dns_cache
@@ -201,6 +278,7 @@ resolve_domain_ipv4() {
 }
 
 apply_app_bypass_routes() {
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
   local gw=""
   local d=""
   local ip=""
@@ -214,7 +292,7 @@ apply_app_bypass_routes() {
   for d in "${APP_BYPASS_DOMAINS[@]}"; do
     while read -r ip; do
       [[ -n "$ip" ]] || continue
-      sudo route -n add -host "$ip" "$gw" >/dev/null 2>&1 || true
+      run_privileged route -n add -host "$ip" "$gw" >/dev/null 2>&1 || true
       echo "$ip,$gw" >> "$BYPASS_ROUTE_FILE"
       added=1
     done < <(resolve_domain_ipv4 "$d")
@@ -226,6 +304,7 @@ apply_app_bypass_routes() {
 }
 
 restore_app_bypass_routes() {
+  [[ "$IS_MACOS" -eq 1 ]] || return 0
   [[ -f "$BYPASS_ROUTE_FILE" ]] || return 0
 
   local line=""
@@ -236,7 +315,7 @@ restore_app_bypass_routes() {
     [[ -n "$line" ]] || continue
     ip="${line%%,*}"
     gw="${line##*,}"
-    sudo route -n delete -host "$ip" "$gw" >/dev/null 2>&1 || sudo route -n delete -host "$ip" >/dev/null 2>&1 || true
+    run_privileged route -n delete -host "$ip" "$gw" >/dev/null 2>&1 || run_privileged route -n delete -host "$ip" >/dev/null 2>&1 || true
   done < "$BYPASS_ROUTE_FILE"
 
   rm -f "$BYPASS_ROUTE_FILE"
@@ -306,7 +385,11 @@ sync_openvpn_endpoints() {
     fi
 
     cp "$cfg" "$cfg.bak"
-    sed -i '' -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+    if sed --version >/dev/null 2>&1; then
+      sed -i -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+    else
+      sed -i '' -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+    fi
     echo -e "${CYAN}Updated OpenVPN endpoint in $(basename "$cfg") -> ${tf_ip}${RESET}"
     updated=1
   done
@@ -321,7 +404,15 @@ detect_active_protocol() {
   [[ -n "$pid" ]] || { echo "unknown"; return 0; }
 
   local cmdline=""
-  cmdline="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    cmdline="$(powershell.exe -NoProfile -Command "\
+      \$p = Get-CimInstance Win32_Process -Filter \"ProcessId=$pid\" -ErrorAction SilentlyContinue; \
+      if (\$p) { Write-Output \$p.CommandLine }\
+    " 2>/dev/null | tr -d '\r' || true)"
+  else
+    cmdline="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  fi
+
   if [[ "$cmdline" == *"client-openvpn-tcp.ovpn"* ]]; then
     echo "tcp"
   elif [[ "$cmdline" == *"client-openvpn-udp.ovpn"* ]]; then
@@ -368,18 +459,39 @@ cmd_connect() {
     return
   fi
 
-  if [[ ! -x "$OPENVPN" ]]; then
-    echo -e "${RED}openvpn binary not found: $OPENVPN${RESET}" >&2
-    echo "Install with: brew install openvpn"
+  if ! resolve_openvpn_binary; then
+    echo -e "${RED}openvpn binary not found in PATH or common install locations.${RESET}" >&2
+    if [[ "$IS_WINDOWS" -eq 1 ]]; then
+      echo "Install OpenVPN Community client and ensure openvpn.exe is available."
+      echo "Example path: C:\\Program Files\\OpenVPN\\bin\\openvpn.exe"
+    else
+      echo "Install with: brew install openvpn"
+    fi
     exit 1
   fi
 
   echo -e "${CYAN}Connecting using ${ACTIVE_PROTOCOL} profile ($(basename "$ACTIVE_CONFIG"))...${RESET}"
-  sudo "$OPENVPN" \
-    --config "$ACTIVE_CONFIG" \
-    --daemon \
-    --writepid "$PID_FILE" \
-    --log "$LOG_FILE"
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    "$OPENVPN" \
+      --config "$ACTIVE_CONFIG" \
+      --daemon \
+      --writepid "$PID_FILE" \
+      --log "$LOG_FILE" >/dev/null 2>&1 || true
+
+    if ! is_running; then
+      nohup "$OPENVPN" \
+        --config "$ACTIVE_CONFIG" \
+        --writepid "$PID_FILE" \
+        --log "$LOG_FILE" >/dev/null 2>&1 &
+      [[ -f "$PID_FILE" ]] || echo "$!" > "$PID_FILE"
+    fi
+  else
+    run_privileged "$OPENVPN" \
+      --config "$ACTIVE_CONFIG" \
+      --daemon \
+      --writepid "$PID_FILE" \
+      --log "$LOG_FILE"
+  fi
 
   # Wait up to 15s for "Initialization Sequence Completed"
   local i=0
@@ -394,7 +506,7 @@ cmd_connect() {
     fi
     if log_has "AUTH_FAILED\|TLS Error\|Connection refused\|SIGTERM\|decryption-error"; then
       echo -e "${RED}Connection failed. Last log lines:${RESET}"
-      sudo tail -10 "$LOG_FILE"
+      run_privileged tail -10 "$LOG_FILE"
       exit 1
     fi
     printf '.'
@@ -416,12 +528,20 @@ cmd_disconnect() {
   fi
 
   echo -e "${CYAN}Disconnecting (pid $pid)…${RESET}"
-  sudo kill "$pid" 2>/dev/null || true
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    taskkill //PID "$pid" //T >/dev/null 2>&1 || true
+  else
+    run_privileged kill "$pid" 2>/dev/null || true
+  fi
   sleep 1
 
   # Force stop if still alive.
   if pid_is_openvpn "$pid"; then
-    sudo kill -9 "$pid" 2>/dev/null || true
+    if [[ "$IS_WINDOWS" -eq 1 ]]; then
+      taskkill //PID "$pid" //T //F >/dev/null 2>&1 || true
+    else
+      run_privileged kill -9 "$pid" 2>/dev/null || true
+    fi
   fi
 
   rm -f "$PID_FILE"
@@ -441,7 +561,7 @@ cmd_toggle() {
 
 cmd_log() {
   echo -e "${CYAN}Tailing $LOG_FILE  (Ctrl-C to stop)${RESET}"
-  sudo tail -f "$LOG_FILE"
+  run_privileged tail -f "$LOG_FILE"
 }
 
 cmd_sync() {
@@ -601,6 +721,7 @@ cmd_help() {
   echo "Notes:"
   echo "  - connect also pins DNS to 1.1.1.1 + 8.8.8.8, then restores your original DNS on disconnect"
   echo "  - connect also adds temporary bypass routes for WeChat/QQ domains via local gateway"
+  echo "  - on Windows Git Bash, DNS pinning and bypass routes are skipped (macOS-only behavior)"
 }
 
 # ── dispatch ───────────────────────────────────────────────────────────────────

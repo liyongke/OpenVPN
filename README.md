@@ -22,6 +22,21 @@ Now configured for **OpenVPN dual transport on port 443**:
 ./vpn.sh speed tcp    # temporary TCP test (auto connect/disconnect)
 ```
 
+Windows quick start:
+
+```powershell
+.\vpn.ps1 connect      # start VPN (TCP default)
+.\vpn.ps1 connect udp  # optional UDP mode
+.\vpn.ps1 status       # show state + current public IP
+.\vpn.ps1 disconnect   # stop VPN
+```
+
+```bat
+vpn.cmd connect
+vpn.cmd status
+vpn.cmd disconnect
+```
+
 `vpn.sh` now also:
 - Pins DNS to `1.1.1.1` + `8.8.8.8` while connected.
 - Restores your previous macOS DNS settings on disconnect.
@@ -58,7 +73,9 @@ curl ifconfig.me        # should return 54.254.169.193 (EC2 IP)
 
 | File | Purpose |
 |---|---|
-| `vpn.sh` | **macOS VPN helper** — connect / disconnect / status / toggle / log / speed |
+| `vpn.sh` | Bash VPN helper (macOS + Git Bash on Windows) — connect / disconnect / status / toggle / log / speed |
+| `vpn.ps1` | Native Windows PowerShell helper — connect / disconnect / status / toggle / log |
+| `vpn.cmd` | CMD wrapper for `vpn.ps1` |
 | `client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
 | `client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
 | `client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
