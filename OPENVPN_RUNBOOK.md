@@ -18,6 +18,8 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 10. [Operational Checks](#10-operational-checks)
 11. [Security Notes](#11-security-notes)
 12. [Fast Recovery Procedure](#12-fast-recovery-procedure)
+13. [Reusable Operations Playbook](#13-reusable-operations-playbook)
+14. [AI Skills Prompt Bank](#14-ai-skills-prompt-bank)
 
 ---
 
@@ -520,3 +522,98 @@ aws ssm send-command \
   --document-name AWS-RunShellScript \
   --parameters '{"commands":["sudo systemctl restart openvpn@server-udp openvpn@server-tcp","sudo systemctl status openvpn@server-udp --no-pager","sudo systemctl status openvpn@server-tcp --no-pager"]}'
 ```
+
+---
+
+## 13. Reusable Operations Playbook
+
+Use these copy-paste blocks as the default operational workflow for future changes.
+
+### Deploy
+
+```bash
+# Resolve runtime values
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+VPN_IP="$(terraform output -raw vpn_server_public_ip)"
+
+# Run server bootstrap on EC2 via SSM shell
+aws ssm start-session --target "$INSTANCE_ID"
+# In SSM session:
+#   chmod +x /home/ec2-user/openvpn_setup.sh
+#   /home/ec2-user/openvpn_setup.sh "$VPN_IP"
+```
+
+### Verify
+
+```bash
+# Local client quick checks
+./vpn.sh status
+curl -sS ifconfig.me
+
+# Server-side checks via SSM command
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl is-active openvpn@server-tcp","sudo systemctl is-active openvpn@server-udp","sudo ss -lntp | grep :443","sudo ss -lnup | grep :443","sudo grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","sudo grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf"]}'
+```
+
+### Debug
+
+```bash
+# 1) Auth and hook failures
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["journalctl -u openvpn@server-tcp -n 120 --no-pager | grep -Ei \"AUTH|FAILED|client-connect|error\" || true","journalctl -u openvpn@server-udp -n 120 --no-pager | grep -Ei \"AUTH|FAILED|client-connect|error\" || true","ls -l /etc/openvpn/scripts/client-connect-device-hints.sh /var/log/openvpn/device_hints.json || true"]}'
+
+# 2) Status-file mapping sanity
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["grep -nE \"^status \" /etc/openvpn/server-tcp.conf","grep -nE \"^status \" /etc/openvpn/server-udp.conf","tail -n 20 /var/log/openvpn/status-tcp.log","tail -n 20 /var/log/openvpn/status-udp.log"]}'
+```
+
+### Recover
+
+```bash
+# Safe restart for dual transport services
+INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["sudo systemctl restart openvpn@server-tcp openvpn@server-udp","sudo systemctl is-active openvpn@server-tcp openvpn@server-udp","sudo tail -n 40 /var/log/openvpn/status-tcp.log","sudo tail -n 40 /var/log/openvpn/status-udp.log"]}'
+
+# Reconnect client after server-side changes
+./vpn.sh disconnect
+./vpn.sh connect
+./vpn.sh status
+```
+
+### Guardrails
+
+- Keep exactly one status directive in each OpenVPN server config.
+- Keep tcp service writing to /var/log/openvpn/status-tcp.log and udp service writing to /var/log/openvpn/status-udp.log.
+- Keep client-connect hook enabled in both configs when device labels are required.
+- Treat bash -n checks as mandatory before deploying setup or hook scripts.
+
+---
+
+## 14. AI Skills Prompt Bank
+
+For reusable AI operations/debugging prompts, use:
+
+- [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
+- [.github/copilot-instructions.md](.github/copilot-instructions.md)
+- [.github/prompts](.github/prompts)
+
+This file contains reusable prompt templates for triage, root-cause proof, safe change sequencing, drift detection, and regression guardrail extraction.
+
+Location and usage:
+- Repository-owned prompt templates are versioned under `.github/prompts`.
+- Local one-click VS Code prompts are stored in `/Users/ryan/Library/Application Support/Code/User/prompts`.
+- If you update one location, copy changes to the other to keep behavior consistent.
