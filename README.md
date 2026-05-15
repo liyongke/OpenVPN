@@ -22,6 +22,71 @@ This page is the high-level entrypoint. Full procedures and incident details are
   - TCP: `10.9.0.0/24`
 - Portal exposed through VPN tunnel by default (not public unless explicitly enabled)
 
+## Design and Workflow Diagram
+
+
+![OpenVPN Design and Workflow](docs/diagrams/openvpn-design-workflow.svg)
+
+<details>
+<summary>Show Mermaid source (editable, plugin-friendly)</summary>
+
+```mermaid
+flowchart TB
+  %% ============ A) System Design ============
+  subgraph A["A) System Design"]
+    OP["Operator Device\n(vpn.sh / vpn.ps1 / vpn.cmd)"]
+    CP["Client Profiles\nclients/*.ovpn"]
+    EC2["OpenVPN EC2 Server\nTCP 443 default, UDP 443 optional"]
+    TEL["Telemetry + Metadata\nstatus-tcp/udp + device_hints"]
+    PORTAL["Portal Service\nopenvpn_portal + vpn-portal-phase1"]
+
+    TF["Terraform\ninfrastructure/\nS3 remote backend"]
+    OPS["Ops Scripts\nscripts/\nsetup/reconcile/rotate/hooks"]
+    SSM["AWS SSM Control Plane\nsession + send-command"]
+
+    OP -->|uses| CP
+    CP -->|connects| EC2
+    EC2 -->|writes| TEL
+    TEL -->|read model| PORTAL
+
+    TF -->|orchestrates| OPS
+    OPS -->|executes via| SSM
+    SSM -.->|operates| EC2
+    SSM -.->|manages| PORTAL
+  end
+
+  %% ============ B) Delivery Workflow ============
+  subgraph B["B) Delivery and Operations Workflow"]
+    W1["1. Review docs + plan"]
+    W2["2. terraform init/plan/apply"]
+    W3["3. bootstrap/update via SSM"]
+    W4["4. validate services + status mapping"]
+    W5["5. connect client + verify route"]
+    W6["6. observe in portal"]
+    W7["7. operate securely\n(reconcile/rotate)"]
+    W8["8. recover + persist .env"]
+    W9["9. update docs + prompt templates"]
+
+    W1 --> W2 --> W3 --> W4 --> W5 --> W6 --> W7 --> W8 --> W9
+    W9 -.->|continuous loop| W1
+  end
+
+  classDef ops fill:#eef2ff,stroke:#1e40af,stroke-width:1.5px,color:#111827
+  classDef infra fill:#ecfeff,stroke:#0e7490,stroke-width:1.5px,color:#111827
+  classDef core fill:#fef2f2,stroke:#b91c1c,stroke-width:1.5px,color:#111827
+  classDef flow fill:#ffffff,stroke:#334155,stroke-width:1.2px,color:#111827
+
+  class OP,CP,PORTAL,TEL ops
+  class TF,OPS,SSM infra
+  class EC2 core
+  class W1,W2,W3,W4,W5,W6,W7,W8,W9 flow
+```
+</details>
+
+Diagram assets:
+- Mermaid source (canonical): [docs/diagrams/openvpn-design-workflow.mmd](docs/diagrams/openvpn-design-workflow.mmd)
+- Reference image: [docs/diagrams/openvpn-design-workflow.svg](docs/diagrams/openvpn-design-workflow.svg)
+
 ## Quick Start
 
 Use the task guides below instead of duplicating low-level command references on the front page.

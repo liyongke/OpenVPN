@@ -9,6 +9,8 @@ Use this order to navigate summary to detail.
 1. High-level summary
 - [Repository Front Page](../README.md): scope, architecture, quick start
 - [Project Structure](PROJECT_STRUCTURE.txt): canonical layout snapshot
+- [Design and Workflow Diagram (Mermaid Source)](diagrams/openvpn-design-workflow.mmd): canonical editable source
+- [Design and Workflow Diagram (SVG)](diagrams/openvpn-design-workflow.svg): rendered reference image
 
 2. Task-oriented guides
 - [VPN Script Guide](VPN_SH_GUIDE.md): client operations with vpn.sh, vpn.ps1, vpn.cmd
