@@ -65,7 +65,7 @@ Device identification note:
 
 Environment variables:
 
-- PORTAL_HOST default: 127.0.0.1
+- PORTAL_HOST default: 0.0.0.0
 - PORTAL_PORT default: 8088
 - OPENVPN_STATUS_FILE default: auto-detected common paths (legacy single-source fallback)
 - OPENVPN_STATUS_FILES default: /var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log (preferred)
@@ -101,6 +101,11 @@ EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.
 - Legacy `openvpn-server@server` should stay disabled.
 - Rebuild `/home/ec2-user/apps/openvpn_portal/.python-venv` on EC2 after code deploy (do not copy local venv binaries).
+- Reconcile systemd unit after deploy from repo root:
+   - `chmod +x scripts/reconcile_portal_service_ssm.sh`
+   - `./scripts/reconcile_portal_service_ssm.sh`
+   - This keeps `vpn-portal-phase1.service` using `run_portal.sh` (env-driven `PORTAL_HOST`) instead of hardcoded `--host 127.0.0.1`.
+   - Service mode sets `RUN_PORTAL_MANAGE_DEPS=0`; dependency install remains enabled for manual/local runs.
 - Server configs include status directives:
    - `/etc/openvpn/server-tcp.conf` -> `/var/log/openvpn/status-tcp.log`
    - `/etc/openvpn/server-udp.conf` -> `/var/log/openvpn/status-udp.log`

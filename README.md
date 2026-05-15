@@ -130,9 +130,9 @@ GitHub Actions deployment note:
 
 ## Admin Portal
 
-- Public URL output: `terraform output portal_admin_url`
-- Current design: Nginx on `9443` with IP allowlist + HTTP Basic Auth
-- Backend app binds only to `127.0.0.1:8088`
+- VPN-only URL outputs: `terraform output -raw portal_vpn_tcp_url` and `terraform output -raw portal_vpn_udp_url`
+- Public URL output (optional): `terraform output -raw portal_admin_url` when `enable_portal_ingress=true`
+- Backend app binds to `0.0.0.0:8088` so VPN clients can reach it on tunnel IPs
 - Live dashboard shows summary/status/sessions first, with 7-day history moved to the bottom
 - Status Source panel lists each configured status file once and links each source to the read-only status file viewer
 - Active session classification is endpoint-aware, so reused certs/common names can still be distinguished per live connection when peer metadata is available
@@ -150,6 +150,18 @@ chmod +x scripts/rotate_portal_password_ssm.sh
 ```
 
 This updates Nginx Basic Auth on EC2 and refreshes local `portal_credentials.txt`.
+
+Reconcile portal systemd service after deploy (SSM-only):
+
+```bash
+chmod +x scripts/reconcile_portal_service_ssm.sh
+./scripts/reconcile_portal_service_ssm.sh
+```
+
+What it enforces:
+- `/etc/systemd/system/vpn-portal-phase1.service` uses `ExecStart=/home/ec2-user/apps/vpn-portal-phase1-readonly/run_portal.sh`
+- Portal bind is controlled by `.env` (`PORTAL_HOST`), avoiding hardcoded `--host 127.0.0.1` regressions.
+- Service mode sets `RUN_PORTAL_MANAGE_DEPS=0` to avoid pip/venv permission failures during restarts.
 
 SSM-first operations:
 
@@ -180,17 +192,22 @@ INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN
 aws ssm send-command \
   --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \
-  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx","systemctl is-enabled openvpn-server@server || true","grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf","tail -n 10 /var/log/openvpn/status-tcp.log","tail -n 10 /var/log/openvpn/status-udp.log"]}'
+  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx","systemctl is-enabled openvpn-server@server || true","systemctl show vpn-portal-phase1 -p ExecStart","ss -lntp | grep :8088 || true","grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf","tail -n 10 /var/log/openvpn/status-tcp.log","tail -n 10 /var/log/openvpn/status-udp.log"]}'
 
 # 2) Confirm portal auth protection
-PORTAL_URL="$(terraform output -raw portal_admin_url)"
-curl -k -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PORTAL_URL/healthz"
+PORTAL_URL="$(terraform output -raw portal_vpn_tcp_url)"
+curl -sS -o /dev/null -w 'healthz:%{http_code}\n' "$PORTAL_URL/healthz"
 
-# 2b) Confirm history and status viewer routes (with auth)
+# 2b) Confirm history and status viewer routes (VPN-only mode has no public Nginx auth gate)
+curl -sS "$PORTAL_URL/api/history/7d" | head -c 220 && echo
+curl -sS -o /dev/null -w 'status-file:%{http_code}\n' "$PORTAL_URL/status-file"
+curl -sS "$PORTAL_URL/api/live/summary" | head -c 420 && echo
+
+# 2c) Optional public mode check (only when enable_portal_ingress=true)
+PUBLIC_PORTAL_URL="$(terraform output -raw portal_admin_url)"
+curl --cacert <ca.pem> -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PUBLIC_PORTAL_URL/healthz"
 read -r PORTAL_USER PORTAL_PASS < <(awk -F': ' '/^username:/{u=$2} /^password:/{p=$2} END{print u, p}' portal_credentials.txt)
-curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/history/7d" | head -c 220 && echo
-curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" -o /dev/null -w 'status-file:%{http_code}\n' "$PORTAL_URL/status-file"
-curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/live/summary" | head -c 420 && echo
+curl --cacert <ca.pem> -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PUBLIC_PORTAL_URL/api/live/summary" | head -c 420 && echo
 
 # 3) Rotate portal credential when needed
 ./scripts/rotate_portal_password_ssm.sh
@@ -198,6 +215,7 @@ curl -k -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PORTAL_URL/api/live/summary" | head
 
 Portal runtime note:
 - Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/openvpn_portal/.env`.
+- For VPN-only access, keep `PORTAL_HOST=0.0.0.0` and access the portal on the tunnel IP (`10.9.0.1:8088` for TCP clients, `10.8.0.1:8088` for UDP clients).
 - `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
 - Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
 - Keep the OpenVPN `client-connect` hook enabled in both server configs:
@@ -307,6 +325,25 @@ terraform output portal_admin_url
 
 Note:
 - Keep `portal_admin_cidrs` as specific `/32` admin IPs; do not use `0.0.0.0/0`.
+
+### VPN-Only Portal Access (Recommended)
+
+Use the portal only through the VPN tunnel and leave public ingress disabled:
+
+```hcl
+enable_portal_ingress = false
+```
+
+Verify tunnel URLs:
+
+```bash
+terraform output -raw portal_vpn_tcp_url
+terraform output -raw portal_vpn_udp_url
+```
+
+Expected:
+- TCP clients reach `http://10.9.0.1:8088`
+- UDP clients reach `http://10.8.0.1:8088`
 
 ### Notes on Cost
 

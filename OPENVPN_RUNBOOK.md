@@ -62,6 +62,7 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 | Status files | `/var/log/openvpn/status-tcp.log`, `/var/log/openvpn/status-udp.log` |
 | Device hints file | `/var/log/openvpn/device_hints.json` |
 | Device hint hook | `/etc/openvpn/scripts/client-connect-device-hints.sh` |
+| VPN-only portal URLs | `http://10.9.0.1:8088` (TCP clients), `http://10.8.0.1:8088` (UDP clients) |
 | DNS (client) | `8.8.8.8`, `1.1.1.1` (forced through tunnel) |
 | MTU | `1500`, MSS fix `1400` (prevents TCP-over-TCP fragmentation) |
 
@@ -472,6 +473,9 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 - **Rotate client credentials** if a profile is shared/lost: regenerate client cert/key and redistribute updated profile.
 - **Rotate server credentials** if compromise is suspected: regenerate server cert/key and `ta.key`, then redistribute fresh profiles.
 - Prefer AWS Systems Manager Session Manager over SSH for administration.
+- Prefer VPN-only portal exposure on tunnel URLs (`10.9.0.1:8088` / `10.8.0.1:8088`) and keep `enable_portal_ingress=false` unless public admin access is explicitly required.
+- Keep `vpn-portal-phase1` using `ExecStart=.../run_portal.sh` (or `--host 0.0.0.0`) and avoid hardcoded `--host 127.0.0.1` in systemd units.
+- For systemd service starts, disable startup dependency installs (`RUN_PORTAL_MANAGE_DEPS=0`) to prevent venv permission failures.
 - Keep admin portal ingress restricted to explicit `/32` IP allowlists.
 
 ---

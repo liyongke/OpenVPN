@@ -13,10 +13,13 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
   VENV_PYTHON="$SCRIPT_DIR/.python-venv/bin/python"
 fi
 
-"$VENV_PYTHON" -m pip install --upgrade pip >/dev/null
-"$VENV_PYTHON" -m pip install -r requirements.txt >/dev/null
+MANAGE_DEPS="${RUN_PORTAL_MANAGE_DEPS:-1}"
+if [[ "$MANAGE_DEPS" == "1" ]]; then
+  "$VENV_PYTHON" -m pip install --upgrade pip >/dev/null
+  "$VENV_PYTHON" -m pip install -r requirements.txt >/dev/null
+fi
 
-HOST="${PORTAL_HOST:-127.0.0.1}"
+HOST="${PORTAL_HOST:-0.0.0.0}"
 PORT="${PORTAL_PORT:-8088}"
 
 echo "Starting portal on http://${HOST}:${PORT}"

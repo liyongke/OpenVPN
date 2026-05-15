@@ -67,7 +67,7 @@ def _detect_status_files() -> list[str]:
 def load_settings() -> Settings:
     status_files = _detect_status_files()
     return Settings(
-        host=os.getenv("PORTAL_HOST", "127.0.0.1"),
+        host=os.getenv("PORTAL_HOST", "0.0.0.0"),
         port=int(os.getenv("PORTAL_PORT", "8088")),
         title=os.getenv("PORTAL_TITLE", "OpenVPN Portal Phase 2 (Read-Only Ops)"),
         status_files=status_files,

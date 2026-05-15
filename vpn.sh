@@ -249,7 +249,7 @@ restore_dns_state() {
       echo -e "${CYAN}DNS restored on ${service}: automatic${RESET}"
     else
       local dns_servers=()
-      IFS=',' read -r -A dns_servers <<< "$dns_csv"
+      IFS=',' read -r -a dns_servers <<< "$dns_csv"
       run_privileged networksetup -setdnsservers "$service" "${dns_servers[@]}" >/dev/null 2>&1 || true
       echo -e "${CYAN}DNS restored on ${service}: ${dns_servers[*]}${RESET}"
     fi

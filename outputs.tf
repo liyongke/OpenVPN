@@ -42,3 +42,13 @@ output "portal_admin_url" {
   description = "Admin portal URL when portal ingress is enabled"
   value       = var.enable_portal_ingress ? "https://${aws_instance.openvpn_server.public_ip}:${var.portal_ingress_port}" : null
 }
+
+output "portal_vpn_tcp_url" {
+  description = "VPN-only portal URL for TCP clients (tun1 network)"
+  value       = "http://10.9.0.1:8088"
+}
+
+output "portal_vpn_udp_url" {
+  description = "VPN-only portal URL for UDP clients (tun0 network)"
+  value       = "http://10.8.0.1:8088"
+}
