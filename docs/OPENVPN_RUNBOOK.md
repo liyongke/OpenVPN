@@ -2,6 +2,12 @@
 
 Complete reference for the OpenVPN deployment in this repository: architecture, server setup, client usage, all encountered issues and their resolutions, and day-to-day operations.
 
+Related docs:
+- [Repository Front Page](../README.md)
+- [Documentation Hub](README.md)
+- [VPN Script Guide](VPN_SH_GUIDE.md)
+- [Portal Guide](../openvpn_portal/README.md)
+
 ---
 
 ## Table of Contents

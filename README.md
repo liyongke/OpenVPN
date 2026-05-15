@@ -1,379 +1,85 @@
 # OpenVPN Deployment
 
-This project is now organized for clarity and maintainability. See `docs/PROJECT_STRUCTURE.txt` for a summary of the new folder layout.
+Production-oriented OpenVPN deployment on AWS EC2, with dual transport (TCP/UDP on 443), client helpers for macOS/Windows, and a read-only operations portal.
 
-- All Terraform and infrastructure-as-code files are in `infrastructure/`.
-- All client profiles are in `clients/`.
-- All keys are in `keys/` (private keys should be excluded from git).
-- All scripts are in `scripts/`.
-- All documentation is in `docs/`.
-- The portal app remains in `openvpn_portal/`.
-- Update any scripts or documentation references to use the new paths.
+This page is the high-level entrypoint. Full procedures and incident details are in the docs hierarchy linked below.
 
-For usage, see `docs/README.md` and `docs/OPENVPN_RUNBOOK.md`.
+## What This Repo Provides
 
----
+- Infrastructure as code for VPN + portal-related AWS resources (`infrastructure/`)
+- Operational automation scripts (`scripts/`)
+- Client profiles and local client control scripts (`clients/`, `vpn.sh`, `vpn.ps1`, `vpn.cmd`)
+- Read-only OpenVPN operations portal (`openvpn_portal/`)
+- Structured documentation with summary and deep-dive layers (`docs/`)
+
+## Architecture At a Glance
+
+- OpenVPN server on EC2 (`ap-southeast-1`)
+- TCP 443 as default client path (more reliable on restrictive networks)
+- UDP 443 as optional performance path
+- Tunnel networks:
+  - UDP: `10.8.0.0/24`
+  - TCP: `10.9.0.0/24`
+- Portal exposed through VPN tunnel by default (not public unless explicitly enabled)
 
 ## Quick Start
 
-```bash
-./vpn.sh connect      # start VPN (TCP default)
-./vpn.sh connect udp  # optional UDP mode
-./vpn.sh on tcp       # alias of connect
-./vpn.sh disconnect   # stop VPN
-./vpn.sh toggle       # flip state (on → off, off → on)
-./vpn.sh status       # show state + current public IP
-./vpn.sh log          # live-tail the connection log
-./vpn.sh speed        # speed test on current route
-./vpn.sh speed udp    # temporary UDP test (auto connect/disconnect)
-./vpn.sh speed tcp    # temporary TCP test (auto connect/disconnect)
-```
+Use the task guides below instead of duplicating low-level command references on the front page.
 
-Windows quick start:
+- VPN client operations (macOS/Windows): [docs/VPN_SH_GUIDE.md](docs/VPN_SH_GUIDE.md)
+- Full deployment, validation, and recovery: [docs/OPENVPN_RUNBOOK.md](docs/OPENVPN_RUNBOOK.md)
+- Portal runtime/config/deploy notes: [openvpn_portal/README.md](openvpn_portal/README.md)
 
-```powershell
-.\vpn.ps1 connect      # start VPN (TCP default)
-.\vpn.ps1 connect udp  # optional UDP mode
-.\vpn.ps1 status       # show state + current public IP
-.\vpn.ps1 disconnect   # stop VPN
-```
+### Terraform and Remote Backend
 
-```bat
-vpn.cmd connect
-vpn.cmd status
-vpn.cmd disconnect
-```
+Terraform state is configured to use an S3 remote backend in [infrastructure/main.tf](infrastructure/main.tf).
 
-`vpn.sh` now also:
-- Pins DNS to `1.1.1.1` + `8.8.8.8` while connected.
-- Restores your previous macOS DNS settings on disconnect.
-- Adds temporary bypass host routes for common WeChat/QQ domains via local gateway while connected.
-- Uses short DNS timeouts for bypass-route lookups so `connect` will not hang if DNS is unstable.
-
-Default protocol note:
-- `vpn.sh connect` now defaults to TCP for better reliability on restrictive networks.
-
-> **Tip:** add `alias vpn='/absolute/path/to/OpenVPN_deployment/vpn.sh'` to `~/.zshrc` to use `vpn connect` from anywhere.
-
-### Verify the VPN is working
+Use this workflow from the repository root:
 
 ```bash
-curl ifconfig.me        # should return your VPN server public IP
-terraform output -raw vpn_server_public_ip
+terraform -chdir=infrastructure init
+terraform -chdir=infrastructure plan
+terraform -chdir=infrastructure apply
 ```
 
----
+## Documentation Outline
 
-## Infrastructure
+Start with summary pages, then follow links to task guides and deep runbooks.
 
-| Resource | Value |
-|---|---|
-| EC2 Instance | Use `aws ec2 describe-instances` or SSM inventory |
-| Public IP | Use `terraform output -raw vpn_server_public_ip` |
-| Region | `ap-southeast-1` (Singapore) |
-| Protocol | OpenVPN, TCP 443 default + UDP 443 optional |
-| Tunnel | UDP `10.8.0.0/24`, TCP `10.9.0.0/24` |
-| Admin Access | AWS Systems Manager Session Manager (SSM) |
+1. Summary layer
+- [Documentation Hub](docs/README.md): top-level map and operational summary
+- [Project Structure](docs/PROJECT_STRUCTURE.txt): repository layout reference
 
----
+2. Task guide layer
+- [VPN Script Guide](docs/VPN_SH_GUIDE.md): daily client commands on macOS/Windows
+- [Portal Guide](openvpn_portal/README.md): portal config/runtime/deploy notes
 
-## Repository Files
+3. Deep reference layer
+- [OpenVPN Runbook](docs/OPENVPN_RUNBOOK.md): deployment, validation, troubleshooting, recovery
+- [AI Skills Prompt Bank](docs/AI_SKILLS_PROMPT_BANK.md): reusable operations/debug prompts
+- [Prompt Templates](.github/prompts): versioned prompt templates
 
-| File | Purpose |
-|---|---|
-| `vpn.sh` | Bash VPN helper (macOS + Git Bash on Windows) — connect / disconnect / status / toggle / log / speed |
-| `vpn.ps1` | Native Windows PowerShell helper — connect / disconnect / status / toggle / log |
-| `vpn.cmd` | CMD wrapper for `vpn.ps1` |
-| `clients/client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
-| `clients/client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
-| `clients/client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
-| `scripts/openvpn_setup.sh` | Server bootstrap + client profile generator |
-| `infrastructure/main.tf` | Terraform EC2 + security-group definition |
-| `infrastructure/variables.tf` / `infrastructure/outputs.tf` | Terraform vars and outputs |
-| `docs/OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
+## Read by Goal
 
----
+- I need a quick orientation: [docs/README.md](docs/README.md)
+- I need VPN client commands: [docs/VPN_SH_GUIDE.md](docs/VPN_SH_GUIDE.md)
+- I need deployment or incident recovery steps: [docs/OPENVPN_RUNBOOK.md](docs/OPENVPN_RUNBOOK.md)
+- I need portal-specific operations: [openvpn_portal/README.md](openvpn_portal/README.md)
+- I need AI prompt workflows: [docs/AI_SKILLS_PROMPT_BANK.md](docs/AI_SKILLS_PROMPT_BANK.md)
 
-## Server NAT Note
+## Repo Layout
 
-`openvpn_setup.sh` auto-detects the server's outbound interface for NAT rules instead of hardcoding `eth0`.
+- `infrastructure/` Terraform
+- `scripts/` Ops scripts
+- `clients/` OpenVPN client profiles
+- `openvpn_portal/` Portal app
+- `docs/` Docs hub + guides + runbook
+- `keys/` Key material (private keys are git-ignored)
 
-This prevents a common EC2 issue where VPN connects successfully but tunnel traffic has no internet egress because the instance uses a different interface name (for example `ens5`).
+## Security Baseline
 
-For dual transport, UDP and TCP server daemons must use different VPN subnets (for example UDP `10.8.0.0/24`, TCP `10.9.0.0/24`) to avoid route conflicts between `tun` devices.
+- Do not commit secrets, private keys, or credential files.
+- Prefer SSM-based server operations over ad-hoc SSH.
+- Keep exactly one local project venv (`.python-venv/`).
+- Keep portal `.env` backed up and restore it after redeploy/recovery.
 
-Server config consistency note:
-- Keep exactly one `status` directive in each OpenVPN server config.
-- `openvpn@server-tcp` must write `/var/log/openvpn/status-tcp.log`.
-- `openvpn@server-udp` must write `/var/log/openvpn/status-udp.log`.
-- Duplicated or swapped `status` directives will make the portal show valid device data on the wrong protocol row.
-
-## Mobile Notes
-
-- Re-import profile(s) after server/profile updates; mobile apps keep old imported configs.
-- Use `clients/client-openvpn.ovpn` or `clients/client-openvpn-tcp.ovpn` as default profile.
-- Keep `clients/client-openvpn-udp.ovpn` as an optional fallback profile.
-
----
-
-## Documentation
-
-- **[OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md)** — architecture, server deployment, client setup, all issues and resolutions, security notes.
-- **[AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)** — reusable AI prompts for incident triage, root-cause isolation, safe change execution, and regression guardrails.
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** — default Copilot behavior for this repository.
-- **[.github/prompts](.github/prompts)** — versioned prompt templates for common ops/debug workflows.
-- **[.github/workflows/deploy-openvpn-placeholder.yml](.github/workflows/deploy-openvpn-placeholder.yml)** — placeholder CI workflow that runs on push to `main` but does not deploy yet.
-
-AI prompt location note:
-- Repo copies live under `.github/prompts` and are shared through git.
-- One-click VS Code user prompts remain under `$HOME/Library/Application Support/Code/User/prompts`.
-- Keep both in sync when prompt templates are updated.
-
-GitHub Actions deployment note:
-- The workflow in `.github/workflows/deploy-openvpn-placeholder.yml` is intentionally non-destructive.
-- Later, replace placeholder steps with real deployment commands (artifact upload, SSM rollout, post-checks, rollback).
-
----
-
-## Admin Portal
-
-- VPN-only URL outputs: `terraform output -raw portal_vpn_tcp_url` and `terraform output -raw portal_vpn_udp_url`
-- Public URL output (optional): `terraform output -raw portal_admin_url` when `enable_portal_ingress=true`
-- Backend app binds to `0.0.0.0:8088` so VPN clients can reach it on tunnel IPs
-- Live dashboard shows summary/status/sessions first, with 7-day history moved to the bottom
-- Status Source panel lists each configured status file once and links each source to the read-only status file viewer
-- Active session classification is endpoint-aware, so reused certs/common names can still be distinguished per live connection when peer metadata is available
-
-Security notes:
-- Store portal credentials in a password manager.
-- Rotate credentials periodically and after any device compromise.
-- Keep `portal_admin_cidrs` as tight `/32` values.
-
-Credential rotation (SSM-only):
-
-```bash
-chmod +x scripts/rotate_portal_password_ssm.sh
-./scripts/rotate_portal_password_ssm.sh
-```
-
-This updates Nginx Basic Auth on EC2 and refreshes local `portal_credentials.txt`.
-
-Reconcile portal systemd service after deploy (SSM-only):
-
-```bash
-chmod +x scripts/reconcile_portal_service_ssm.sh
-./scripts/reconcile_portal_service_ssm.sh
-```
-
-What it enforces:
-- `/etc/systemd/system/vpn-portal-phase1.service` uses `ExecStart=/home/ec2-user/apps/vpn-portal-phase1-readonly/run_portal.sh`
-- Portal bind is controlled by `.env` (`PORTAL_HOST`), avoiding hardcoded `--host 127.0.0.1` regressions.
-- Service mode sets `RUN_PORTAL_MANAGE_DEPS=0` to avoid pip/venv permission failures during restarts.
-
-SSM-first operations:
-
-```bash
-aws ssm start-session --target <instance-id>
-```
-
-Optional non-interactive command execution:
-
-```bash
-aws ssm send-command \
-  --instance-ids <instance-id> \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["sudo systemctl status openvpn@server-tcp --no-pager"]}'
-```
-
-### Admin Checklist
-
-Run these checks regularly:
-
-TLS/auth safety note:
-- For production checks, prefer valid TLS trust (`--cacert <ca.pem>` or trusted cert chain) instead of `-k`.
-- Avoid typing raw credentials directly in shell history; load from a secured local file or secret store.
-
-```bash
-# 1) Confirm VPN and portal services are up (SSM)
-INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
-aws ssm send-command \
-  --instance-ids "$INSTANCE_ID" \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["systemctl is-active openvpn@server-tcp","systemctl is-active openvpn@server-udp","systemctl is-active vpn-portal-phase1","systemctl is-active nginx","systemctl is-enabled openvpn-server@server || true","systemctl show vpn-portal-phase1 -p ExecStart","ss -lntp | grep :8088 || true","grep -nE \"^status |^status-version \" /etc/openvpn/server-tcp.conf","grep -nE \"^status |^status-version \" /etc/openvpn/server-udp.conf","tail -n 10 /var/log/openvpn/status-tcp.log","tail -n 10 /var/log/openvpn/status-udp.log"]}'
-
-# 2) Confirm portal auth protection
-PORTAL_URL="$(terraform output -raw portal_vpn_tcp_url)"
-curl -sS -o /dev/null -w 'healthz:%{http_code}\n' "$PORTAL_URL/healthz"
-
-# 2b) Confirm history and status viewer routes (VPN-only mode has no public Nginx auth gate)
-curl -sS "$PORTAL_URL/api/history/7d" | head -c 220 && echo
-curl -sS -o /dev/null -w 'status-file:%{http_code}\n' "$PORTAL_URL/status-file"
-curl -sS "$PORTAL_URL/api/live/summary" | head -c 420 && echo
-
-# 2c) Optional public mode check (only when enable_portal_ingress=true)
-PUBLIC_PORTAL_URL="$(terraform output -raw portal_admin_url)"
-curl --cacert <ca.pem> -sS -o /dev/null -w 'no-auth:%{http_code}\n' "$PUBLIC_PORTAL_URL/healthz"
-read -r PORTAL_USER PORTAL_PASS < <(awk -F': ' '/^username:/{u=$2} /^password:/{p=$2} END{print u, p}' portal_credentials.txt)
-curl --cacert <ca.pem> -sS -u "$PORTAL_USER:$PORTAL_PASS" "$PUBLIC_PORTAL_URL/api/live/summary" | head -c 420 && echo
-
-# 3) Rotate portal credential when needed
-./scripts/rotate_portal_password_ssm.sh
-```
-
-Portal runtime note:
-- Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/openvpn_portal/.env`.
-- For VPN-only access, keep `PORTAL_HOST=0.0.0.0` and access the portal on the tunnel IP (`10.9.0.1:8088` for TCP clients, `10.8.0.1:8088` for UDP clients).
-- `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
-- Use one project-level venv (`.python-venv` at project root); do not keep a second venv under `openvpn_portal/`.
-- Keep the OpenVPN `client-connect` hook enabled in both server configs:
-  - `script-security 2`
-  - `setenv DEVICE_HINTS_FILE /var/log/openvpn/device_hints.json`
-  - `client-connect /etc/openvpn/scripts/client-connect-device-hints.sh`
-- Device hints are matched by real endpoint (`ip:port`) first, then by real IP, username, and common name.
-
----
-
-## Manual Commands (without vpn.sh)
-
-```bash
-# Connect
-sudo /opt/homebrew/sbin/openvpn \
-  --config ./clients/client-openvpn.ovpn \
-  --daemon \
-  --writepid /tmp/openvpn-client.pid \
-  --log /tmp/openvpn-client.log
-
-# Check log
-tail -f /tmp/openvpn-client.log
-
-# Disconnect
-sudo kill "$(cat /tmp/openvpn-client.pid)"
-```
-
----
-
-## Prerequisites
-
-```bash
-brew install openvpn       # install OpenVPN client
-chmod +x vpn.sh
-
-# AWS auth for Terraform (no eval needed)
-export AWS_PROFILE=default
-export AWS_SDK_LOAD_CONFIG=1
-```
-
----
-
-## Cost Tracking and Logs
-
-Terraform now supports:
-- **VPC Flow Logs** to CloudWatch Logs (enabled by default)
-- **Monthly AWS Budget email alerts** (optional)
-
-### Enable Budget Alerts
-
-Create `terraform.tfvars`:
-
-```hcl
-enable_monthly_budget_alert   = true
-monthly_budget_limit_usd      = 10
-budget_alert_threshold_percent = 80
-budget_alert_email            = "you@example.com"
-```
-
-Or copy from template:
-
-```bash
-cp terraform.tfvars.example terraform.tfvars
-```
-
-Then apply:
-
-```bash
-terraform init -migrate-state
-terraform plan
-terraform apply
-```
-
-### Verify VPC Flow Logs
-
-```bash
-terraform output vpc_flow_log_group_name
-terraform output vpc_flow_log_id
-```
-
-In AWS Console:
-- CloudWatch Logs -> look for `/aws/vpc/flow-logs/<vpc-id>`
-- Budgets -> verify `openvpn-monthly-budget` (if enabled)
-
-### Persist Portal Ingress (IaC)
-
-To persist portal exposure rules (port `9443`) in Terraform instead of manual AWS console/CLI changes:
-
-```hcl
-enable_portal_ingress = true
-portal_ingress_port   = 9443
-portal_admin_cidrs    = ["<your-public-ip>/32"]
-```
-
-Then apply:
-
-```bash
-terraform plan
-terraform apply
-```
-
-Show resulting URL:
-
-```bash
-terraform output portal_admin_url
-```
-
-Note:
-- Keep `portal_admin_cidrs` as specific `/32` admin IPs; do not use `0.0.0.0/0`.
-
-### VPN-Only Portal Access (Recommended)
-
-Use the portal only through the VPN tunnel and leave public ingress disabled:
-
-```hcl
-enable_portal_ingress = false
-```
-
-Verify tunnel URLs:
-
-```bash
-terraform output -raw portal_vpn_tcp_url
-terraform output -raw portal_vpn_udp_url
-```
-
-Expected:
-- TCP clients reach `http://10.9.0.1:8088`
-- UDP clients reach `http://10.8.0.1:8088`
-
-### Notes on Cost
-
-- VPC Flow Logs incur CloudWatch Logs ingestion/storage charges.
-- Keep retention low (default is `14` days) to control cost.
-- Budget alerts are lightweight and useful for early warning.
-
----
-
-## Portal .env File Persistence and Recovery
-
-The OpenVPN portal's `.env` file is not tracked in git and must be backed up and restored after redeployments or EC2 replacement. If missing, the portal may not show sessions or may fail to start.
-
-- **Backup:** Save `/home/ec2-user/apps/openvpn_portal/.env` to a secure location (S3, password manager, or local machine).
-- **Restore:** After redeployment, copy the backup to the same path before starting the portal service.
-- **Automate:** Add a step to your deployment or reconciliation script to restore the `.env` if missing.
-- **Recovery:** If the portal is missing sessions or not starting, restore `.env` and restart the portal service:
-  ```bash
-  sudo systemctl restart vpn-portal-phase1
-  ```
-- **Example .env:**
-  ```
-  PORTAL_HOST=0.0.0.0
-  PORTAL_PORT=8088
-  OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
-  ```

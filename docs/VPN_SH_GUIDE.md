@@ -2,6 +2,11 @@
 
 Simple setup and daily usage for macOS and Windows.
 
+Related docs:
+- [Documentation Hub](README.md)
+- [OpenVPN Runbook](OPENVPN_RUNBOOK.md)
+- [Repository Front Page](../README.md)
+
 ## Setup
 
 1. Install OpenVPN:
@@ -84,5 +89,5 @@ vpn.cmd disconnect
 ## Quick Troubleshooting
 
 - OpenVPN not found: run `brew install openvpn`.
-- Profile missing: ensure UDP/TCP profile files are next to `vpn.sh`.
+- Profile missing: ensure UDP/TCP profile files are under `../clients/`.
 - Connection issue: run `./vpn.sh log`.
