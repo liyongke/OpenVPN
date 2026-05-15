@@ -1,17 +1,9 @@
-# OpenVPN Deployment
+# OpenVPN Deployment on AWS
 
-This project is now organized for clarity and maintainability. See `docs/PROJECT_STRUCTURE.txt` for a summary of the new folder layout.
-
-- All Terraform and infrastructure-as-code files are in `infrastructure/`.
-- All client profiles are in `clients/`.
-- All keys are in `keys/` (private keys should be excluded from git).
-- All scripts are in `scripts/`.
-- All documentation is in `docs/`.
-- Miscellaneous outputs are in `misc/`.
-- The portal app remains in `openvpn_portal/`.
-- Update any scripts or documentation references to use the new paths.
-
-For usage, see `docs/README.md` and `docs/OPENVPN_RUNBOOK.md`.
+Terraform infrastructure and operational scripts for a personal VPN on AWS EC2 (`ap-southeast-1`).
+Now configured for **OpenVPN dual transport on port 443**:
+- **TCP 443 (default)** for reliability on restrictive networks
+- **UDP 443 (optional)** for speed when the network allows it
 
 ---
 
@@ -85,13 +77,16 @@ terraform output -raw vpn_server_public_ip
 | `vpn.sh` | Bash VPN helper (macOS + Git Bash on Windows) — connect / disconnect / status / toggle / log / speed |
 | `vpn.ps1` | Native Windows PowerShell helper — connect / disconnect / status / toggle / log |
 | `vpn.cmd` | CMD wrapper for `vpn.ps1` |
-| `client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
-| `client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
-| `client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
-| `openvpn_setup.sh` | Server bootstrap + client profile generator |
-| `main.tf` | Terraform EC2 + security-group definition |
-| `variables.tf` / `outputs.tf` | Terraform vars and outputs |
-| `OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
+| `clients/client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
+| `clients/client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
+| `clients/client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
+| `scripts/openvpn_setup.sh` | Server bootstrap + client profile generator |
+| `infrastructure/main.tf` | Terraform EC2 + security-group definition |
+| `infrastructure/variables.tf` / `infrastructure/outputs.tf` | Terraform vars and outputs |
+| `docs/OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
+| `openvpn_portal/` | Python portal app and related files |
+| `keys/` | Key files (private keys should be excluded from git) |
+| `misc/` | Miscellaneous outputs and artifacts |
 
 ---
 

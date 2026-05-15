@@ -110,3 +110,21 @@ EC2 deployment baseline used by this repo:
    - `/etc/openvpn/server-tcp.conf` -> `/var/log/openvpn/status-tcp.log`
    - `/etc/openvpn/server-udp.conf` -> `/var/log/openvpn/status-udp.log`
 - Keep exactly one `status` directive in each config; duplicated swapped status lines will make protocol rows appear reversed.
+
+## .env File Persistence and Recovery
+
+**Important:** The `.env` file is not tracked in git and must be backed up and restored after redeployments or EC2 replacement. If missing, the portal may not show sessions or may fail to start.
+
+- **Backup:** Save `/home/ec2-user/apps/openvpn_portal/.env` to a secure location (S3, password manager, or local machine).
+- **Restore:** After redeployment, copy the backup to the same path before starting the portal service.
+- **Automate:** Add a step to your deployment or reconciliation script to restore the `.env` if missing.
+- **Recovery:** If the portal is missing sessions or not starting, restore `.env` and restart the portal service:
+  ```bash
+  sudo systemctl restart vpn-portal-phase1
+  ```
+- **Example .env:**
+  ```
+  PORTAL_HOST=0.0.0.0
+  PORTAL_PORT=8088
+  OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
+  ```

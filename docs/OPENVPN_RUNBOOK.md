@@ -20,6 +20,7 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 12. [Fast Recovery Procedure](#12-fast-recovery-procedure)
 13. [Reusable Operations Playbook](#13-reusable-operations-playbook)
 14. [AI Skills Prompt Bank](#14-ai-skills-prompt-bank)
+15. [Portal .env File Persistence and Recovery](#15-portal-env-file-persistence-and-recovery)
 
 ---
 
@@ -70,12 +71,19 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 
 ## 3. Repository Files
 
-| File | Purpose |
+| File/Folder | Purpose |
 |---|---|
-| `vpn.sh` | macOS helper — connect / disconnect / status / toggle / log |
-| `client-openvpn.ovpn` | Client profile; import on macOS or iPhone |
-| `openvpn_setup.sh` | Server bootstrap + profile generator; run on EC2 via SSM |
-| `main.tf` | Terraform EC2 + security-group definition |
+| `vpn.sh`, `vpn.ps1`, `vpn.cmd` | VPN client helpers for macOS, Windows PowerShell, and CMD |
+| `clients/` | All client .ovpn profiles |
+| `scripts/` | All operational shell scripts (including openvpn_setup.sh) |
+| `infrastructure/` | All Terraform and infrastructure-as-code files |
+| `openvpn_portal/` | Python portal app and related files |
+| `keys/` | Key files (private keys should be excluded from git) |
+| `docs/` | All documentation and guides |
+| `misc/` | Miscellaneous outputs and artifacts |
+| `.github/` | GitHub workflows, prompts, and Copilot instructions |
+| `.python-venv/` | Local venv (should be in .gitignore) |
+| `portal_credentials.txt` | Portal credentials (rotate and store securely) |
 
 ---
 
@@ -621,3 +629,36 @@ Location and usage:
 - Repository-owned prompt templates are versioned under `.github/prompts`.
 - Local one-click VS Code prompts are stored in `$HOME/Library/Application Support/Code/User/prompts`.
 - If you update one location, copy changes to the other to keep behavior consistent.
+
+---
+
+## 15. Portal .env File Persistence and Recovery
+
+### Why persist the .env file?
+- The portal's `.env` file is not tracked in git and will be lost if the EC2 instance is replaced, redeployed, or cleaned.
+- Without this file, the portal may not show all sessions or may not start correctly.
+
+### What to persist
+- Path: `/home/ec2-user/apps/openvpn_portal/.env`
+- Example contents:
+  ```
+  PORTAL_HOST=0.0.0.0
+  PORTAL_PORT=8088
+  OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
+  ```
+
+### How to persist
+- **Backup**: Save a copy of the `.env` file to a secure location (S3, password manager, or local machine).
+- **Restore**: After redeployment, copy the backup to the correct path before starting the portal service.
+- **Automate**: Add a step to your deployment or reconciliation script to restore the `.env` from backup if missing.
+
+### Fast Recovery
+If the portal is missing sessions or not starting:
+1. Restore the `.env` file as above.
+2. Restart the portal service:
+   ```bash
+   sudo systemctl restart vpn-portal-phase1
+   ```
+3. Refresh the portal in your browser and verify all sessions are visible.
+
+---
