@@ -4,13 +4,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-if [[ ! -d .python-venv ]]; then
-  python3 -m venv .python-venv
+# Prefer a single project-level venv at repo root.
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ ! -d "$PROJECT_ROOT/openvpn_portal" ]]; then
+  PROJECT_ROOT="$SCRIPT_DIR"
+fi
+VENV_DIR="${PORTAL_VENV_DIR:-$PROJECT_ROOT/.python-venv}"
+
+if [[ ! -d "$VENV_DIR" ]]; then
+  python3 -m venv "$VENV_DIR"
 fi
 
-VENV_PYTHON="$SCRIPT_DIR/.python-venv/bin/python3"
+VENV_PYTHON="$VENV_DIR/bin/python3"
 if [[ ! -x "$VENV_PYTHON" ]]; then
-  VENV_PYTHON="$SCRIPT_DIR/.python-venv/bin/python"
+  VENV_PYTHON="$VENV_DIR/bin/python"
 fi
 
 MANAGE_DEPS="${RUN_PORTAL_MANAGE_DEPS:-1}"

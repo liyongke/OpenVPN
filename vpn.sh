@@ -5,9 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_UDP="$SCRIPT_DIR/client-openvpn-udp.ovpn"
-CONFIG_TCP="$SCRIPT_DIR/client-openvpn-tcp.ovpn"
-CONFIG_LEGACY="$SCRIPT_DIR/client-openvpn.ovpn"
+CONFIG_UDP="$SCRIPT_DIR/clients/client-openvpn-udp.ovpn"
+CONFIG_TCP="$SCRIPT_DIR/clients/client-openvpn-tcp.ovpn"
+CONFIG_LEGACY="$SCRIPT_DIR/clients/client-openvpn.ovpn"
 
 OS_UNAME="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
 IS_WINDOWS=0

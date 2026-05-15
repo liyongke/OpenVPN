@@ -8,9 +8,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ConfigTcp = Join-Path $ScriptDir "client-openvpn-tcp.ovpn"
-$ConfigUdp = Join-Path $ScriptDir "client-openvpn-udp.ovpn"
-$ConfigLegacy = Join-Path $ScriptDir "client-openvpn.ovpn"
+$ConfigTcp = Join-Path $ScriptDir "clients/client-openvpn-tcp.ovpn"
+$ConfigUdp = Join-Path $ScriptDir "clients/client-openvpn-udp.ovpn"
+$ConfigLegacy = Join-Path $ScriptDir "clients/client-openvpn.ovpn"
 $PidFile = Join-Path $env:TEMP "openvpn-client.pid"
 $LogFile = Join-Path $env:TEMP "openvpn-client.log"
 

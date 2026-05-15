@@ -1,85 +1,18 @@
-total 80
-drwxr-xr-x@ 6 ryan  staff    192 May 15 23:47 clients
-drwxr-xr-x@ 7 ryan  staff    224 May 15 23:47 docs
-drwxr-xr-x@ 8 ryan  staff    256 May 15 23:47 infrastructure
-drwxr-xr-x@ 4 ryan  staff    128 May 15 23:47 keys
-drwxr-xr-x@ 4 ryan  staff    128 May 15 23:47 misc
-drwxr-xr-x@ 9 ryan  staff    288 Apr 16 02:14 openvpn_portal
--rw-------@ 1 ryan  staff    159 Apr 15 21:47 portal_credentials.txt
-drwxr-xr-x@ 6 ryan  staff    192 May 15 23:47 scripts
--rw-r--r--@ 1 ryan  staff    123 Apr 15 19:54 vpn.cmd
--rw-r--r--@ 1 ryan  staff   5301 Apr 15 19:54 vpn.ps1
--rwxr-xr-x@ 1 ryan  staff  21345 May 15 21:53 vpn.sh
+OpenVPN_deployment/
+|- infrastructure/      # Terraform and IaC
+|- openvpn_portal/      # Portal app source and launcher
+|- scripts/             # Ops and deployment scripts
+|- clients/             # OpenVPN client profiles
+|- keys/                # Key materials (private keys ignored)
+|- docs/                # Runbooks and guides
+|- .github/             # Prompts, workflows, copilot instructions
+|- .python-venv/        # Single project-level Python virtual environment
+|- vpn.sh
+|- vpn.ps1
+|- vpn.cmd
+`- portal_credentials.txt
 
-./clients:
-total 56
--rw-------@ 1 ryan  staff  5768 Mar 30 18:10 client-openvpn-tcp.ovpn
--rw-------@ 1 ryan  staff  5761 Mar 30 18:10 client-openvpn-udp.ovpn
--rw-------@ 1 ryan  staff  5768 Apr  4 23:57 client-openvpn.ovpn
--rw-------@ 1 ryan  staff   946 Mar 23 00:51 client-openvpn.ovpn.bak
-
-./docs:
-total 120
--rw-r--r--@ 1 ryan  staff   9335 May 15 23:40 AI_SKILLS_PROMPT_BANK.md
--rw-r--r--@ 1 ryan  staff  24655 May 15 23:40 OPENVPN_RUNBOOK.md
--rw-r--r--@ 1 ryan  staff      0 May 15 23:47 PROJECT_STRUCTURE.txt
--rw-r--r--@ 1 ryan  staff  13785 May 15 23:40 README.md
--rw-r--r--@ 1 ryan  staff   2213 Apr 15 19:54 VPN_SH_GUIDE.md
-
-./infrastructure:
-total 48
--rw-r--r--@ 1 ryan  staff  7655 Apr 15 21:31 main.tf
--rw-r--r--@ 1 ryan  staff  1851 May 15 22:25 outputs.tf
--rw-r--r--@ 1 ryan  staff   100 May 15 22:25 terraform.tfvars
--rw-r--r--@ 1 ryan  staff   363 Apr 15 21:51 terraform.tfvars.example
--rw-r--r--@ 1 ryan  staff  1834 Apr 15 21:08 variables.tf
-
-./keys:
-total 16
--r--------@ 1 ryan  staff  1675 Mar 22 19:21 openvpn-key.pem
--rw-r--r--@ 1 ryan  staff   381 Mar 23 00:47 openvpn-key.pub
-
-./misc:
-total 16
--rw-r--r--@ 1 ryan  staff  3126 May 15 23:29 ssm_output.json
--rw-r--r--@ 1 ryan  staff  1827 May 15 23:29 ssm_output.txt
-
-./openvpn_portal:
-total 40
--rw-r--r--@ 1 ryan  staff  5743 May 15 23:40 README.md
-drwxr-xr-x@ 8 ryan  staff   256 Apr 16 02:14 app
--rw-r--r--@ 1 ryan  staff   342 Apr 16 00:28 device_hints.example.json
--rw-r--r--@ 1 ryan  staff    83 Apr 15 20:50 requirements.txt
--rwxr-xr-x@ 1 ryan  staff   713 May 15 22:47 run_portal.sh
-
-./openvpn_portal/app:
-total 24
--rw-r--r--@ 1 ryan  staff     0 Apr 15 20:23 __init__.py
--rw-r--r--@ 1 ryan  staff  2607 May 15 22:25 config.py
--rw-r--r--@ 1 ryan  staff  4327 Apr 16 00:28 main.py
-drwxr-xr-x@ 5 ryan  staff   160 Apr 15 22:25 services
-drwxr-xr-x@ 4 ryan  staff   128 Apr 16 00:32 static
-drwxr-xr-x@ 4 ryan  staff   128 Apr 15 22:28 templates
-
-./openvpn_portal/app/services:
-total 72
--rw-r--r--@ 1 ryan  staff   4242 Apr 15 22:36 history_store.py
--rw-r--r--@ 1 ryan  staff   4124 Apr 16 00:28 live_state.py
--rw-r--r--@ 1 ryan  staff  17885 Apr 16 01:23 openvpn_reader.py
-
-./openvpn_portal/app/static:
-total 16
--rw-r--r--@ 1 ryan  staff   640 Apr 16 00:33 openvpn-icon.svg
--rw-r--r--@ 1 ryan  staff  3441 Apr 16 00:33 style.css
-
-./openvpn_portal/app/templates:
-total 40
--rw-r--r--@ 1 ryan  staff  14503 Apr 16 00:33 index.html
--rw-r--r--@ 1 ryan  staff   1632 Apr 16 00:33 status_file.html
-
-./scripts:
-total 48
--rwxr-xr-x@ 1 ryan  staff   3508 Apr 16 01:45 openvpn_client_connect_device_hints.sh
--rw-r--r--@ 1 ryan  staff  10809 Apr 16 02:01 openvpn_setup.sh
--rwxr-xr-x@ 1 ryan  staff   2888 May 15 22:47 reconcile_portal_service_ssm.sh
--rwxr-xr-x@ 1 ryan  staff   3316 Apr 15 21:51 rotate_portal_password_ssm.sh
+Notes:
+- Keep only one local virtual environment at project root: .python-venv/
+- Do not keep a second venv under openvpn_portal/
+- Client profiles are expected under clients/

@@ -12,10 +12,10 @@ brew install openvpn
 
 On Windows, install OpenVPN Community client (openvpn.exe).
 
-2. Keep these files in the same folder:
+2. Keep these files in the expected structure:
 - `vpn.sh`
-- `client-openvpn-tcp.ovpn` (default)
-- `client-openvpn-udp.ovpn` (optional)
+- `clients/client-openvpn-tcp.ovpn` (default)
+- `clients/client-openvpn-udp.ovpn` (optional)
 
 3. Make script executable:
 

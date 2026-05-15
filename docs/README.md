@@ -86,7 +86,6 @@ terraform output -raw vpn_server_public_ip
 | `docs/OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
 | `openvpn_portal/` | Python portal app and related files |
 | `keys/` | Key files (private keys should be excluded from git) |
-| `misc/` | Miscellaneous outputs and artifacts |
 
 ---
 
@@ -107,8 +106,8 @@ Server config consistency note:
 ## Mobile Notes
 
 - Re-import profile(s) after server/profile updates; mobile apps keep old imported configs.
-- Use `client-openvpn.ovpn` or `client-openvpn-tcp.ovpn` as default profile.
-- Keep `client-openvpn-udp.ovpn` as an optional fallback profile.
+- Use `clients/client-openvpn.ovpn` or `clients/client-openvpn-tcp.ovpn` as default profile.
+- Keep `clients/client-openvpn-udp.ovpn` as an optional fallback profile.
 
 ---
 
@@ -220,7 +219,7 @@ Portal runtime note:
 - Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/openvpn_portal/.env`.
 - For VPN-only access, keep `PORTAL_HOST=0.0.0.0` and access the portal on the tunnel IP (`10.9.0.1:8088` for TCP clients, `10.8.0.1:8088` for UDP clients).
 - `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
-- Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
+- Use one project-level venv (`.python-venv` at project root); do not keep a second venv under `openvpn_portal/`.
 - Keep the OpenVPN `client-connect` hook enabled in both server configs:
   - `script-security 2`
   - `setenv DEVICE_HINTS_FILE /var/log/openvpn/device_hints.json`
@@ -234,7 +233,7 @@ Portal runtime note:
 ```bash
 # Connect
 sudo /opt/homebrew/sbin/openvpn \
-  --config ./client-openvpn.ovpn \
+  --config ./clients/client-openvpn.ovpn \
   --daemon \
   --writepid /tmp/openvpn-client.pid \
   --log /tmp/openvpn-client.log

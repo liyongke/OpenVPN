@@ -80,7 +80,6 @@ Complete reference for the OpenVPN deployment in this repository: architecture, 
 | `openvpn_portal/` | Python portal app and related files |
 | `keys/` | Key files (private keys should be excluded from git) |
 | `docs/` | All documentation and guides |
-| `misc/` | Miscellaneous outputs and artifacts |
 | `.github/` | GitHub workflows, prompts, and Copilot instructions |
 | `.python-venv/` | Local venv (should be in .gitignore) |
 | `portal_credentials.txt` | Portal credentials (rotate and store securely) |
@@ -161,7 +160,7 @@ client-connect /etc/openvpn/scripts/client-connect-device-hints.sh
 
 ## 5. Client Profile Reference
 
-File: `client-openvpn.ovpn`
+File: `clients/client-openvpn.ovpn`
 
 ```ini
 dev tun
@@ -255,7 +254,7 @@ $ ./vpn.sh status
 ```bash
 # Connect (daemon mode)
 sudo /opt/homebrew/sbin/openvpn \
-  --config ./client-openvpn.ovpn \
+  --config ./clients/client-openvpn.ovpn \
   --daemon \
   --writepid /tmp/openvpn-client.pid \
   --log /tmp/openvpn-client.log
@@ -278,7 +277,7 @@ sudo kill "$(cat /tmp/openvpn-client.pid)"
 ## 8. iPhone Setup and Usage
 
 1. Install **OpenVPN Connect** from the App Store.
-2. Transfer `client-openvpn.ovpn` to iPhone via AirDrop, Files app, or email.
+2. Transfer `clients/client-openvpn.ovpn` to iPhone via AirDrop, Files app, or email.
 3. Tap the file — OpenVPN Connect will prompt to import the profile.
 4. Toggle the profile switch to connect.
 5. Verify: open a browser and check `ifconfig.me` — it should show `<vpn_server_public_ip>`.
@@ -519,7 +518,7 @@ NEW_IP="$(terraform output -raw vpn_server_public_ip)"
 echo "New IP: $NEW_IP"
 
 # Update client profile
-sed -i '' "s/remote .* 443/remote $NEW_IP 443/" client-openvpn.ovpn
+sed -i '' "s/remote .* 443/remote $NEW_IP 443/" clients/client-openvpn.ovpn
 
 # Reconnect
 ./vpn.sh connect

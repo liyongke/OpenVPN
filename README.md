@@ -7,7 +7,6 @@ This project is now organized for clarity and maintainability. See `docs/PROJECT
 - All keys are in `keys/` (private keys should be excluded from git).
 - All scripts are in `scripts/`.
 - All documentation is in `docs/`.
-- Miscellaneous outputs are in `misc/`.
 - The portal app remains in `openvpn_portal/`.
 - Update any scripts or documentation references to use the new paths.
 
@@ -85,13 +84,13 @@ terraform output -raw vpn_server_public_ip
 | `vpn.sh` | Bash VPN helper (macOS + Git Bash on Windows) — connect / disconnect / status / toggle / log / speed |
 | `vpn.ps1` | Native Windows PowerShell helper — connect / disconnect / status / toggle / log |
 | `vpn.cmd` | CMD wrapper for `vpn.ps1` |
-| `client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
-| `client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
-| `client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
-| `openvpn_setup.sh` | Server bootstrap + client profile generator |
-| `main.tf` | Terraform EC2 + security-group definition |
-| `variables.tf` / `outputs.tf` | Terraform vars and outputs |
-| `OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
+| `clients/client-openvpn-tcp.ovpn` | OpenVPN TCP client profile (default/recommended) |
+| `clients/client-openvpn-udp.ovpn` | OpenVPN UDP client profile (optional) |
+| `clients/client-openvpn.ovpn` | Mobile-friendly profile (aligned to TCP default) |
+| `scripts/openvpn_setup.sh` | Server bootstrap + client profile generator |
+| `infrastructure/main.tf` | Terraform EC2 + security-group definition |
+| `infrastructure/variables.tf` / `infrastructure/outputs.tf` | Terraform vars and outputs |
+| `docs/OPENVPN_RUNBOOK.md` | Full OpenVPN implementation + troubleshooting runbook |
 
 ---
 
@@ -112,8 +111,8 @@ Server config consistency note:
 ## Mobile Notes
 
 - Re-import profile(s) after server/profile updates; mobile apps keep old imported configs.
-- Use `client-openvpn.ovpn` or `client-openvpn-tcp.ovpn` as default profile.
-- Keep `client-openvpn-udp.ovpn` as an optional fallback profile.
+- Use `clients/client-openvpn.ovpn` or `clients/client-openvpn-tcp.ovpn` as default profile.
+- Keep `clients/client-openvpn-udp.ovpn` as an optional fallback profile.
 
 ---
 
@@ -225,7 +224,7 @@ Portal runtime note:
 - Keep `OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log` in `/home/ec2-user/apps/openvpn_portal/.env`.
 - For VPN-only access, keep `PORTAL_HOST=0.0.0.0` and access the portal on the tunnel IP (`10.9.0.1:8088` for TCP clients, `10.8.0.1:8088` for UDP clients).
 - `OPENVPN_STATUS_FILE` can remain set for backward compatibility, but multi-source uses `OPENVPN_STATUS_FILES`.
-- Do not ship a local `.python-venv` inside deployment artifacts; always recreate the venv on EC2 after deploy.
+- Use one project-level venv (`.python-venv` at project root); do not keep a second venv under `openvpn_portal/`.
 - Keep the OpenVPN `client-connect` hook enabled in both server configs:
   - `script-security 2`
   - `setenv DEVICE_HINTS_FILE /var/log/openvpn/device_hints.json`
@@ -239,7 +238,7 @@ Portal runtime note:
 ```bash
 # Connect
 sudo /opt/homebrew/sbin/openvpn \
-  --config ./client-openvpn.ovpn \
+  --config ./clients/client-openvpn.ovpn \
   --daemon \
   --writepid /tmp/openvpn-client.pid \
   --log /tmp/openvpn-client.log

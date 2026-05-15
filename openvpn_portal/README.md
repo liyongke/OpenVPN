@@ -100,7 +100,7 @@ Automatic server-side enrichment (recommended):
 EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.
 - Legacy `openvpn-server@server` should stay disabled.
-- Rebuild `/home/ec2-user/apps/openvpn_portal/.python-venv` on EC2 after code deploy (do not copy local venv binaries).
+- Use one project-level venv (`/home/ec2-user/apps/.python-venv` in the standard repo layout) and avoid a second venv inside `openvpn_portal/`.
 - Reconcile systemd unit after deploy from repo root:
    - `chmod +x scripts/reconcile_portal_service_ssm.sh`
    - `./scripts/reconcile_portal_service_ssm.sh`
