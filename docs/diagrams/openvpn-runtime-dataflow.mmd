@@ -5,8 +5,8 @@ flowchart LR
     OVPN[OpenVPN Server\nopenvpn@server-tcp/udp]
     STATUS[Status Logs\n/var/log/openvpn/status-tcp.log\n/var/log/openvpn/status-udp.log]
     HINTS[Device Hints\n/var/log/openvpn/device_hints.json]
-    PORTAL[Portal API/UI\nopenvpn_portal]
-    HISTORY[History DB\nportal_history.db]
+    PORTAL[Portal API/UI\nvpn-portal-tcp: 10.9.0.1:8088\nvpn-portal-udp: 10.8.0.1:8088]
+    HISTORY[History DB\ndata/history.sqlite3]
 
     CLIENT --> TCP --> OVPN
     CLIENT --> UDP --> OVPN

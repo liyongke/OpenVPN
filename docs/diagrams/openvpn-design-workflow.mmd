@@ -5,7 +5,7 @@ flowchart TB
         CP["Client Profiles\nclients/*.ovpn"]
         EC2["OpenVPN EC2 Server\nTCP 443 default, UDP 443 optional"]
         TEL["Telemetry + Metadata\nstatus-tcp/udp + device_hints"]
-        PORTAL["Portal Service\nopenvpn_portal + vpn-portal-phase1"]
+        PORTAL["Portal Service\nopenvpn_portal + vpn-portal-tcp/udp"]
 
         TF["Terraform\ninfrastructure/\nS3 remote backend"]
         OPS["Ops Scripts\nscripts/\nsetup/reconcile/rotate/hooks"]
@@ -31,7 +31,7 @@ flowchart TB
         W5["5. connect client + verify route"]
         W6["6. observe in portal"]
         W7["7. operate securely\n(reconcile/rotate)"]
-        W8["8. recover + persist .env"]
+        W8["8. deploy manages env; protect data/"]
         W9["9. update docs + prompt templates"]
 
         W1 --> W2 --> W3 --> W4 --> W5 --> W6 --> W7 --> W8 --> W9
