@@ -154,6 +154,7 @@ Pipeline behavior:
 1. Pull requests to `main`: validation only (Python compile, `bash -n`, Terraform validate).
 2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, deploy through SSM.
 3. Workflow dispatch: optional manual deploy with `instance_id` and `artifact_s3_uri` overrides.
+4. Deploy job resolves `artifact_s3_uri` in-job from secret/input and fails fast if empty before sending SSM command.
 
 Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).

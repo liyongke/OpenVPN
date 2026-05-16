@@ -107,6 +107,8 @@ sequenceDiagram
   Dev->>GH: Push main / workflow_dispatch
   GH->>GH: Validate Python, shell, Terraform
   GH->>GH: Package openvpn_portal artifact
+  GH->>GH: Resolve deploy artifact URI
+  GH->>GH: Fail fast if ARTIFACT_S3_URI empty
   GH->>STS: Assume role via OIDC
   STS-->>GH: Temporary credentials
   GH->>S3: Upload artifact tar.gz
@@ -173,6 +175,10 @@ What it does:
 - Validates Python, shell scripts, and Terraform on pull requests.
 - Packages `openvpn_portal/` on `main` and uploads a release artifact to S3.
 - Deploys to EC2 via AWS SSM on `main` (or manual dispatch), then runs health and OpenVPN guardrail checks.
+
+Deploy safety behavior:
+- The deploy job resolves `artifact_s3_uri` again in-job from `ARTIFACT_S3_URI` secret (or dispatch override) before SSM execution.
+- The workflow fails fast if the resolved `ARTIFACT_S3_URI` is empty, preventing partial/no-op deploy attempts on EC2.
 
 Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).

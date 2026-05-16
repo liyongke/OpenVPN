@@ -11,6 +11,8 @@ sequenceDiagram
     Dev->>GH: Push main / workflow_dispatch
     GH->>GH: Validate Python, shell, Terraform
     GH->>GH: Package openvpn_portal artifact
+    GH->>GH: Resolve deploy artifact URI
+    GH->>GH: Fail fast if ARTIFACT_S3_URI empty
     GH->>STS: Assume role via OIDC
     STS-->>GH: Temporary credentials
     GH->>S3: Upload artifact tar.gz

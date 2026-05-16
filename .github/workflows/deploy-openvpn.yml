@@ -179,15 +179,37 @@ jobs:
 
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve deploy artifact metadata
+        id: deploy_meta
+        shell: bash
+        env:
+          DEFAULT_ARTIFACT_S3_URI: ${{ secrets.ARTIFACT_S3_URI }}
+          INPUT_ARTIFACT_S3_URI: ${{ github.event.inputs.artifact_s3_uri }}
+        run: |
+          set -euo pipefail
+          S3_PREFIX="${INPUT_ARTIFACT_S3_URI:-$DEFAULT_ARTIFACT_S3_URI}"
+          if [[ -z "$S3_PREFIX" ]]; then
+            echo "ERROR: Missing artifact S3 prefix. Set secret ARTIFACT_S3_URI or workflow input artifact_s3_uri." >&2
+            exit 1
+          fi
+          ARTIFACT_NAME="portal-${GITHUB_SHA}.tar.gz"
+          ARTIFACT_URI="${S3_PREFIX%/}/${ARTIFACT_NAME}"
+          echo "artifact_s3_uri=$ARTIFACT_URI" >> "$GITHUB_OUTPUT"
+
       - name: Deploy artifact via SSM
         id: ssm
         shell: bash
         env:
           INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
-          ARTIFACT_S3_URI: ${{ needs.package.outputs.artifact_s3_uri }}
+          ARTIFACT_S3_URI: ${{ steps.deploy_meta.outputs.artifact_s3_uri }}
           APP_DIR: ${{ env.APP_DIR }}
         run: |
           set -euo pipefail
+
+          if [[ -z "$ARTIFACT_S3_URI" ]]; then
+            echo "ERROR: ARTIFACT_S3_URI resolved empty; refusing to run SSM deploy." >&2
+            exit 1
+          fi
 
           read -r -d '' REMOTE_SCRIPT <<'EOF' || true
           set -euo pipefail
