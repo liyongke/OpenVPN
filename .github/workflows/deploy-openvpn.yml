@@ -356,13 +356,13 @@ jobs:
 
           # Create default env files on first deploy (or after manual deletion)
           if [[ ! -f "$APP_DIR/.env.tcp" ]]; then
-            printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal - TCP\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history-tcp.sqlite3\n' > "$APP_DIR/.env.tcp"
+            printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.tcp"
             chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
             chmod 600 "$APP_DIR/.env.tcp"
             echo "INFO: Created default .env.tcp"
           fi
           if [[ ! -f "$APP_DIR/.env.udp" ]]; then
-            printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal - UDP\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history-udp.sqlite3\n' > "$APP_DIR/.env.udp"
+            printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.udp"
             chown ec2-user:ec2-user "$APP_DIR/.env.udp"
             chmod 600 "$APP_DIR/.env.udp"
             echo "INFO: Created default .env.udp"
