@@ -1,22 +1,22 @@
 # Diagram Assets
 
-This folder stores architecture/workflow diagram source and rendered assets.
+This folder stores architecture, runtime, and delivery workflow diagram sources.
 
-## Canonical Source
+## Diagram Catalog
 
-- `openvpn-design-workflow.mmd` (Mermaid)
+1. System design + operations workflow
+- Source: [openvpn-design-workflow.mmd](openvpn-design-workflow.mmd)
+- Rendered reference: [openvpn-design-workflow.svg](openvpn-design-workflow.svg)
 
-Use Mermaid in VS Code to edit and preview this file.
+2. CI/CD deployment sequence (GitHub Actions + OIDC + SSM)
+- Source: [openvpn-cicd-ssm-sequence.mmd](openvpn-cicd-ssm-sequence.mmd)
 
-## Rendered Asset
-
-- `openvpn-design-workflow.svg`
-
-Use this as a stable image reference in markdown pages.
+3. Runtime data flow (OpenVPN -> status/device-hints -> portal -> history)
+- Source: [openvpn-runtime-dataflow.mmd](openvpn-runtime-dataflow.mmd)
 
 ## Update Workflow
 
-1. Edit `openvpn-design-workflow.mmd`.
+1. Edit Mermaid source files in this folder.
 2. Validate and preview in Mermaid plugin.
-3. Export/refresh `openvpn-design-workflow.svg` when needed.
-4. Keep README links pointing to both source and rendered file.
+3. Export/update SVG assets when a stable rendered reference is needed.
+4. Keep [../README.md](../README.md) and [../../README.md](../../README.md) diagram links in sync.

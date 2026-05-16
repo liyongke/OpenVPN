@@ -87,6 +87,61 @@ flowchart TB
 Diagram assets:
 - Mermaid source (canonical): [docs/diagrams/openvpn-design-workflow.mmd](docs/diagrams/openvpn-design-workflow.mmd)
 - Reference image: [docs/diagrams/openvpn-design-workflow.svg](docs/diagrams/openvpn-design-workflow.svg)
+- CI/CD sequence source: [docs/diagrams/openvpn-cicd-ssm-sequence.mmd](docs/diagrams/openvpn-cicd-ssm-sequence.mmd)
+- Runtime data flow source: [docs/diagrams/openvpn-runtime-dataflow.mmd](docs/diagrams/openvpn-runtime-dataflow.mmd)
+- Diagram catalog: [docs/diagrams/README.md](docs/diagrams/README.md)
+
+## CI/CD Deployment Sequence Diagram
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Dev as Developer
+  participant GH as GitHub Actions
+  participant STS as AWS STS (OIDC)
+  participant S3 as S3 Artifact Bucket
+  participant SSM as AWS SSM
+  participant EC2 as OpenVPN EC2
+  participant Portal as vpn-portal-phase1
+
+  Dev->>GH: Push main / workflow_dispatch
+  GH->>GH: Validate Python, shell, Terraform
+  GH->>GH: Package openvpn_portal artifact
+  GH->>STS: Assume role via OIDC
+  STS-->>GH: Temporary credentials
+  GH->>S3: Upload artifact tar.gz
+  GH->>SSM: send-command (deploy script)
+  SSM->>EC2: Execute deployment commands
+  EC2->>S3: Download artifact
+  EC2->>Portal: Restart service (systemd)
+  EC2->>EC2: Verify OpenVPN guardrails
+  EC2-->>SSM: Command output + status
+  SSM-->>GH: Invocation result
+  GH->>EC2: Health check via SSM output review
+  GH-->>Dev: Pass / Fail with logs
+```
+
+## Runtime Data Flow Diagram
+
+```mermaid
+flowchart LR
+  CLIENT[VPN Client\nmacOS / Windows / iPhone]
+  TCP[TCP Tunnel\n10.9.0.0/24]
+  UDP[UDP Tunnel\n10.8.0.0/24]
+  OVPN[OpenVPN Server\nopenvpn@server-tcp/udp]
+  STATUS[Status Logs\n/var/log/openvpn/status-tcp.log\n/var/log/openvpn/status-udp.log]
+  HINTS[Device Hints\n/var/log/openvpn/device_hints.json]
+  PORTAL[Portal API/UI\nopenvpn_portal]
+  HISTORY[History DB\nportal_history.db]
+
+  CLIENT --> TCP --> OVPN
+  CLIENT --> UDP --> OVPN
+  OVPN --> STATUS
+  OVPN --> HINTS
+  STATUS --> PORTAL
+  HINTS --> PORTAL
+  PORTAL --> HISTORY
+```
 
 ## Quick Start
 
@@ -98,15 +153,17 @@ Use the task guides below instead of duplicating low-level command references on
 
 ### Terraform and Remote Backend
 
-Terraform state is configured to use an S3 remote backend in [infrastructure/main.tf](infrastructure/main.tf).
+Terraform state is configured to use an S3 remote backend in [infrastructure/backend.hcl](infrastructure/backend.hcl).
 
 Use this workflow from the repository root:
 
 ```bash
-terraform -chdir=infrastructure init
+terraform -chdir=infrastructure init -backend-config=backend.hcl
 terraform -chdir=infrastructure plan
 terraform -chdir=infrastructure apply
 ```
+
+Backend settings live in [infrastructure/backend.hcl](infrastructure/backend.hcl).
 
 ## GitHub Actions CI/CD
 
@@ -121,6 +178,13 @@ Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
 - Repository secret `ARTIFACT_S3_URI` (S3 prefix, for example `s3://<bucket>/<prefix>`).
 - Repository variable `AWS_REGION` (optional, defaults to `ap-southeast-1`).
+
+Terraform can create the OIDC deploy role for this workflow. After apply, set the secret from Terraform output:
+
+```bash
+ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+```
 
 Manual dispatch inputs:
 - `deploy` (boolean): run or skip deployment.

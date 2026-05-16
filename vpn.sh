@@ -366,10 +366,14 @@ set_active_profile() {
 
 sync_openvpn_endpoints() {
   command -v terraform >/dev/null 2>&1 || return 0
+  [[ -d "$SCRIPT_DIR/infrastructure" ]] || return 0
 
   local tf_ip=""
-  tf_ip="$(cd "$SCRIPT_DIR" && terraform output -raw vpn_server_public_ip 2>/dev/null || true)"
-  [[ -n "$tf_ip" ]] || return 0
+  tf_ip="$(cd "$SCRIPT_DIR/infrastructure" && terraform output -no-color -raw vpn_server_public_ip 2>/dev/null | tr -d '\r\n' || true)"
+  if [[ ! "$tf_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo -e "${YELLOW}Terraform output vpn_server_public_ip unavailable/invalid. Skipping endpoint sync.${RESET}" >&2
+    return 0
+  fi
 
   local cfg=""
   local current_ip=""
@@ -384,14 +388,19 @@ sync_openvpn_endpoints() {
       continue
     fi
 
-    cp "$cfg" "$cfg.bak"
-    if sed --version >/dev/null 2>&1; then
-      sed -i -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+    # Only update if the remote line matches expected pattern
+    if grep -qE '^remote [^ ]+ [0-9]+$' "$cfg"; then
+      cp "$cfg" "$cfg.bak"
+      if sed --version >/dev/null 2>&1; then
+        sed -i -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+      else
+        sed -i '' -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+      fi
+      echo -e "${CYAN}Updated OpenVPN endpoint in $(basename "$cfg") -> ${tf_ip}${RESET}"
+      updated=1
     else
-      sed -i '' -E "s/^remote [^ ]+ ([0-9]+)$/remote ${tf_ip} \1/" "$cfg"
+      echo -e "${YELLOW}Skipped endpoint update for $(basename "$cfg"): no matching remote line.${RESET}" >&2
     fi
-    echo -e "${CYAN}Updated OpenVPN endpoint in $(basename "$cfg") -> ${tf_ip}${RESET}"
-    updated=1
   done
 
   [[ "$found" -eq 1 ]] || return 0

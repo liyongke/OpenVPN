@@ -66,6 +66,10 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+locals {
+  github_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+}
+
 resource "aws_key_pair" "openvpn_key" {
   key_name   = "OpenVPNKey"
   public_key = fileexists("${path.module}/openvpn-key.pub") ? file("${path.module}/openvpn-key.pub") : file("${path.module}/../keys/openvpn-key.pub")
@@ -171,6 +175,79 @@ resource "aws_iam_role_policy_attachment" "admin_attach" {
 resource "aws_iam_instance_profile" "openvpn_instance_profile" {
   name = "openvpn-instance-profile"
   role = aws_iam_role.openvpn_admin_role.name
+}
+
+# IAM role for GitHub Actions OIDC deployment workflow
+data "aws_iam_policy_document" "github_actions_oidc_assume_role" {
+  statement {
+    sid     = "AllowGitHubActionsAssumeRole"
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [local.github_oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_repository_owner}/${var.github_repository_name}:ref:refs/heads/${var.github_oidc_branch}"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_actions_deploy_role" {
+  name               = var.github_actions_oidc_role_name
+  assume_role_policy = data.aws_iam_policy_document.github_actions_oidc_assume_role.json
+}
+
+data "aws_iam_policy_document" "github_actions_deploy_policy" {
+  statement {
+    sid    = "AllowEc2Describe"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowS3ArtifactAccess"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:AbortMultipartUpload",
+      "s3:ListBucket"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowSsmDeployOps"
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+      "ssm:GetCommandInvocation",
+      "ssm:ListCommandInvocations",
+      "ssm:ListCommands",
+      "ssm:DescribeInstanceInformation"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_deploy_policy" {
+  name   = "OpenVPNGitHubActionsDeployPolicy"
+  role   = aws_iam_role.github_actions_deploy_role.id
+  policy = data.aws_iam_policy_document.github_actions_deploy_policy.json
 }
 
 # VPC

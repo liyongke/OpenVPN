@@ -9,8 +9,11 @@ Use this order to navigate summary to detail.
 1. High-level summary
 - [Repository Front Page](../README.md): scope, architecture, quick start
 - [Project Structure](PROJECT_STRUCTURE.txt): canonical layout snapshot
-- [Design and Workflow Diagram (Mermaid Source)](diagrams/openvpn-design-workflow.mmd): canonical editable source
-- [Design and Workflow Diagram (SVG)](diagrams/openvpn-design-workflow.svg): rendered reference image
+- [System Design + Workflow Diagram (Mermaid)](diagrams/openvpn-design-workflow.mmd): canonical architecture and lifecycle
+- [System Design + Workflow Diagram (SVG)](diagrams/openvpn-design-workflow.svg): rendered reference image
+- [CI/CD Deployment Sequence Diagram](diagrams/openvpn-cicd-ssm-sequence.mmd): GitHub Actions to EC2 via OIDC and SSM
+- [Runtime Data Flow Diagram](diagrams/openvpn-runtime-dataflow.mmd): status/device-hints to portal and history storage
+- [Diagram Catalog](diagrams/README.md): all diagram assets and update workflow
 
 2. Task-oriented guides
 - [VPN Script Guide](VPN_SH_GUIDE.md): client operations with vpn.sh, vpn.ps1, vpn.cmd
@@ -29,12 +32,66 @@ Use this order to navigate summary to detail.
 - Need portal-specific operations: [../openvpn_portal/README.md](../openvpn_portal/README.md)
 - Need AI-assisted operational workflows: [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
 
+## Embedded Diagrams
+
+### CI/CD Deployment Sequence
+
+```mermaid
+sequenceDiagram
+	autonumber
+	participant Dev as Developer
+	participant GH as GitHub Actions
+	participant STS as AWS STS (OIDC)
+	participant S3 as S3 Artifact Bucket
+	participant SSM as AWS SSM
+	participant EC2 as OpenVPN EC2
+	participant Portal as vpn-portal-phase1
+
+	Dev->>GH: Push main / workflow_dispatch
+	GH->>GH: Validate Python, shell, Terraform
+	GH->>GH: Package openvpn_portal artifact
+	GH->>STS: Assume role via OIDC
+	STS-->>GH: Temporary credentials
+	GH->>S3: Upload artifact tar.gz
+	GH->>SSM: send-command (deploy script)
+	SSM->>EC2: Execute deployment commands
+	EC2->>S3: Download artifact
+	EC2->>Portal: Restart service (systemd)
+	EC2->>EC2: Verify OpenVPN guardrails
+	EC2-->>SSM: Command output + status
+	SSM-->>GH: Invocation result
+	GH->>EC2: Health check via SSM output review
+	GH-->>Dev: Pass / Fail with logs
+```
+
+### Runtime Data Flow
+
+```mermaid
+flowchart LR
+	CLIENT[VPN Client\nmacOS / Windows / iPhone]
+	TCP[TCP Tunnel\n10.9.0.0/24]
+	UDP[UDP Tunnel\n10.8.0.0/24]
+	OVPN[OpenVPN Server\nopenvpn@server-tcp/udp]
+	STATUS[Status Logs\n/var/log/openvpn/status-tcp.log\n/var/log/openvpn/status-udp.log]
+	HINTS[Device Hints\n/var/log/openvpn/device_hints.json]
+	PORTAL[Portal API/UI\nopenvpn_portal]
+	HISTORY[History DB\nportal_history.db]
+
+	CLIENT --> TCP --> OVPN
+	CLIENT --> UDP --> OVPN
+	OVPN --> STATUS
+	OVPN --> HINTS
+	STATUS --> PORTAL
+	HINTS --> PORTAL
+	PORTAL --> HISTORY
+```
+
 ## Operational Summary
 
 ### Deployment and infra changes
 
 1. Apply Terraform from `infrastructure/`.
-2. Backend state is remote (S3) as configured in `infrastructure/main.tf`.
+2. Backend state is remote (S3) as configured in `infrastructure/backend.hcl`.
 3. Use SSM-first workflows for server-side changes.
 4. Reconcile portal systemd unit after deploy when needed.
 

@@ -77,7 +77,7 @@ Environment variables:
 - OPENVPN_STATUS_FILE default: auto-detected common paths (legacy single-source fallback)
 - OPENVPN_STATUS_FILES default: /var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log (preferred)
 - OPENVPN_LOG_FILE default: /var/log/openvpn/openvpn.log
-- PORTAL_HISTORY_DB default: /home/ec2-user/apps/openvpn_portal/data/history.sqlite3
+- PORTAL_HISTORY_DB default: /home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
 - PORTAL_HISTORY_RETENTION_DAYS default: 7
 - PORTAL_HISTORY_SAMPLE_SECONDS default: 60
 - PORTAL_LIVE_POLL_SECONDS default: 1.0
@@ -122,7 +122,7 @@ EC2 deployment baseline used by this repo:
 
 **Important:** The `.env` file is not tracked in git and must be backed up and restored after redeployments or EC2 replacement. If missing, the portal may not show sessions or may fail to start.
 
-- **Backup:** Save `/home/ec2-user/apps/openvpn_portal/.env` to a secure location (S3, password manager, or local machine).
+- **Backup:** Save `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env` to a secure location (S3, password manager, or local machine).
 - **Restore:** After redeployment, copy the backup to the same path before starting the portal service.
 - **Automate:** Add a step to your deployment or reconciliation script to restore the `.env` if missing.
 - **Recovery:** If the portal is missing sessions or not starting, restore `.env` and restart the portal service:

@@ -18,6 +18,24 @@ Reusable AI skills and prompt templates for faster operations and debugging in t
 Sync rule:
 - Keep repo prompt templates and local user prompts aligned after any template update.
 
+Prompt file mapping (.github/prompts):
+- Skill 1: openvpn-symptom-triage.prompt.md
+- Skill 2: openvpn-root-cause-proof.prompt.md
+- Skill 3: openvpn-safe-change-plan.prompt.md
+- Skill 4: openvpn-cross-config-consistency-audit.prompt.md
+- Skill 5: openvpn-runtime-context-permission-diagnosis.prompt.md
+- Skill 6: openvpn-postfix-verification.prompt.md
+- Skill 7: openvpn-deployment-drift-detection.prompt.md
+- Skill 8: openvpn-regression-guardrail-extraction.prompt.md
+- Skill 9: openvpn-security-hygiene-audit.prompt.md
+- Skill 10: openvpn-vpn-only-portal-reachability-check.prompt.md
+- Skill 11: openvpn-systemd-guardrail.prompt.md
+- Skill 12: openvpn-status-device-hints-consistency.prompt.md
+- Skill 13: openvpn-github-actions-oidc-ssm-deployment-triage.prompt.md
+- Skill 14: openvpn-service-vs-local-deps.prompt.md
+- Skill 15: openvpn-portal-env-persistence.prompt.md
+- Skill 16: openvpn-peak-session-spike-audit.prompt.md
+
 ---
 
 ## Skill 1: Symptom-to-Hypothesis Triage
@@ -287,7 +305,7 @@ Expected output:
 
 ---
 
-## Skill 13: Service Mode vs Local Mode Dependency Management
+## Skill 14: Service Mode vs Local Mode Dependency Management
 
 When to use:
 - To prevent pip/venv permission errors in systemd service mode.
@@ -309,7 +327,7 @@ Expected output:
 
 ---
 
-## Skill 14: Portal .env File Persistence and Recovery
+## Skill 15: Portal .env File Persistence and Recovery
 
 When to use:
 - After redeployment, EC2 replacement, or any incident where the portal is missing sessions or fails to start.
@@ -319,7 +337,7 @@ Prompt template:
 
 ```
 Check and enforce persistence of the OpenVPN portal .env file:
-1. Confirm /home/ec2-user/apps/openvpn_portal/.env exists and contains correct settings.
+1. Confirm /home/ec2-user/apps/vpn-portal-phase1-readonly/.env exists and contains correct settings.
 2. If missing, restore from secure backup or recreate with:
    PORTAL_HOST=0.0.0.0
    PORTAL_PORT=8088
@@ -336,7 +354,7 @@ Expected output:
 
 ---
 
-## Skill 15: Peak Session Spike Audit (Raw vs Trusted)
+## Skill 16: Peak Session Spike Audit (Raw vs Trusted)
 
 When to use:
 - Daily history shows a sudden `Peak Active` jump that appears inconsistent with normal user/device behavior.

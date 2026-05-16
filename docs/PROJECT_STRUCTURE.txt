@@ -10,7 +10,7 @@ OpenVPN_deployment/
 |- vpn.sh
 |- vpn.ps1
 |- vpn.cmd
-`- portal_credentials.txt
+`- portal_credentials.txt  # Generated locally by rotation script (gitignored)
 
 Notes:
 - Keep only one local virtual environment at project root: .python-venv/

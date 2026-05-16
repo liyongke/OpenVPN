@@ -7,7 +7,7 @@ When to use:
 Prompt:
 
 Check and enforce persistence of the OpenVPN portal .env file:
-1. Confirm /home/ec2-user/apps/openvpn_portal/.env exists and contains correct settings.
+1. Confirm /home/ec2-user/apps/vpn-portal-phase1-readonly/.env exists and contains correct settings.
 2. If missing, restore from secure backup or recreate with:
    PORTAL_HOST=0.0.0.0
    PORTAL_PORT=8088

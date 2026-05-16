@@ -69,3 +69,27 @@ variable "portal_admin_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "github_actions_oidc_role_name" {
+  description = "IAM role name assumed by GitHub Actions via OIDC"
+  type        = string
+  default     = "GitHubActionsOpenVPNDeployRole"
+}
+
+variable "github_repository_owner" {
+  description = "GitHub repository owner allowed to assume the OIDC role"
+  type        = string
+  default     = "liyongke"
+}
+
+variable "github_repository_name" {
+  description = "GitHub repository name allowed to assume the OIDC role"
+  type        = string
+  default     = "OpenVPN"
+}
+
+variable "github_oidc_branch" {
+  description = "Git branch allowed to assume the OIDC role"
+  type        = string
+  default     = "main"
+}

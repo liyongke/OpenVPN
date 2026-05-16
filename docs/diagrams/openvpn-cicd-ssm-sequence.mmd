@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant Dev as Developer
+    participant GH as GitHub Actions
+    participant STS as AWS STS (OIDC)
+    participant S3 as S3 Artifact Bucket
+    participant SSM as AWS SSM
+    participant EC2 as OpenVPN EC2
+    participant Portal as vpn-portal-phase1
+
+    Dev->>GH: Push main / workflow_dispatch
+    GH->>GH: Validate Python, shell, Terraform
+    GH->>GH: Package openvpn_portal artifact
+    GH->>STS: Assume role via OIDC
+    STS-->>GH: Temporary credentials
+    GH->>S3: Upload artifact tar.gz
+    GH->>SSM: send-command (deploy script)
+    SSM->>EC2: Execute deployment commands
+    EC2->>S3: Download artifact
+    EC2->>Portal: Restart service (systemd)
+    EC2->>EC2: Verify OpenVPN guardrails
+    EC2-->>SSM: Command output + status
+    SSM-->>GH: Invocation result
+    GH->>EC2: Health check via SSM output review
+    GH-->>Dev: Pass / Fail with logs

@@ -7,6 +7,7 @@ Related docs:
 - [Documentation Hub](README.md)
 - [VPN Script Guide](VPN_SH_GUIDE.md)
 - [Portal Guide](../openvpn_portal/README.md)
+- [Diagram Catalog](diagrams/README.md)
 
 ---
 
@@ -43,6 +44,11 @@ Related docs:
 ---
 
 ## 2. Architecture
+
+Diagram references:
+- [System Design + Workflow](diagrams/openvpn-design-workflow.mmd)
+- [CI/CD Deployment Sequence](diagrams/openvpn-cicd-ssm-sequence.mmd)
+- [Runtime Data Flow](diagrams/openvpn-runtime-dataflow.mmd)
 
 ```
 [ macOS / iPhone ]
@@ -88,7 +94,7 @@ Related docs:
 | `docs/` | All documentation and guides |
 | `.github/` | GitHub workflows, prompts, and Copilot instructions |
 | `.python-venv/` | Local venv (should be in .gitignore) |
-| `portal_credentials.txt` | Portal credentials (rotate and store securely) |
+| `portal_credentials.txt` | Generated local artifact (gitignored) written by credential-rotation script |
 
 ---
 
@@ -106,6 +112,9 @@ Related docs:
 # Resolve target values:
 INSTANCE_ID="$(aws ec2 describe-instances --filters Name=tag:Name,Values=OpenVPN-Server Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
 VPN_IP="$(terraform output -raw vpn_server_public_ip)"
+
+# Initialize Terraform using the checked-in backend config:
+terraform -chdir=infrastructure init -backend-config=backend.hcl
 
 # Open an SSM shell session, upload/openvpn_setup.sh by your preferred secure method,
 # then run it directly on the instance:
@@ -150,6 +159,14 @@ Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
 - Secret: `ARTIFACT_S3_URI` (artifact prefix `s3://<bucket>/<path>`).
 - Variable: `AWS_REGION` (optional; default `ap-southeast-1`).
+
+OIDC role bootstrap via Terraform:
+
+```bash
+terraform -chdir=infrastructure apply
+ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+```
 
 Post-deploy checks executed by workflow:
 - `vpn-portal-phase1` systemd service is restarted and verified as active.
@@ -680,7 +697,7 @@ Location and usage:
 - Without this file, the portal may not show all sessions or may not start correctly.
 
 ### What to persist
-- Path: `/home/ec2-user/apps/openvpn_portal/.env`
+- Path: `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env`
 - Example contents:
   ```
   PORTAL_HOST=0.0.0.0

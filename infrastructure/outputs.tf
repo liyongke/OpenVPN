@@ -8,6 +8,11 @@ output "iam_role_arn" {
   value       = aws_iam_role.openvpn_admin_role.arn
 }
 
+output "github_actions_oidc_role_arn" {
+  description = "ARN of IAM role assumed by GitHub Actions via OIDC"
+  value       = aws_iam_role.github_actions_deploy_role.arn
+}
+
 output "openvpn_connect_hint" {
   description = "Quick OpenVPN endpoint hint"
   value       = "OpenVPN endpoint: ${aws_instance.openvpn_server.public_ip}:443 (udp primary, tcp fallback)"
