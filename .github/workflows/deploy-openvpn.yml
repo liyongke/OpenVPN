@@ -282,9 +282,11 @@ jobs:
             mkdir -p "$PYTHON_ROOT"
             curl -fsSL -o "$PYTHON_TARBALL" "$PYTHON_URL"
             tar -xzf "$PYTHON_TARBALL" -C "$PYTHON_ROOT"
+            # python-build-standalone install_only tarballs extract into a python/ subdirectory
+            PYTHON_BIN_DIR="$PYTHON_ROOT/python/bin"
 
-            ln -sf "$PYTHON_ROOT/bin/python3.13" /usr/local/bin/python3.13
-            ln -sf "$PYTHON_ROOT/bin/pip3.13" /usr/local/bin/pip3.13
+            ln -sf "$PYTHON_BIN_DIR/python3.13" /usr/local/bin/python3.13
+            ln -sf "$PYTHON_BIN_DIR/pip3.13" /usr/local/bin/pip3.13
 
             if ! command -v python3.13 >/dev/null 2>&1; then
               echo "ERROR: python3.13 install completed but binary is missing" >&2
