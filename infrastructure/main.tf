@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }
 
@@ -66,8 +70,22 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+data "tls_certificate" "github_actions_oidc" {
+  url = "https://token.actions.githubusercontent.com"
+}
+
+resource "aws_iam_openid_connect_provider" "github_actions" {
+  url = "https://token.actions.githubusercontent.com"
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = [
+    data.tls_certificate.github_actions_oidc.certificates[0].sha1_fingerprint
+  ]
+}
+
 locals {
-  github_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+  github_oidc_provider_arn = aws_iam_openid_connect_provider.github_actions.arn
 }
 
 resource "aws_key_pair" "openvpn_key" {
