@@ -340,6 +340,15 @@ jobs:
             chmod 600 "$APP_DIR/.env" || true
           fi
 
+          # Create a safe default .env if still missing (first deploy / no prior backup).
+          # systemd EnvironmentFile= (no leading -) will hard-fail if the file is absent.
+          if [[ ! -f "$APP_DIR/.env" ]]; then
+            printf 'PORTAL_HOST=0.0.0.0\nPORTAL_PORT=8088\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\n' > "$APP_DIR/.env"
+            chown ec2-user:ec2-user "$APP_DIR/.env"
+            chmod 600 "$APP_DIR/.env"
+            echo "INFO: Created default .env (no prior backup found)."
+          fi
+
           cat > "$UNIT_PATH" <<UNIT
           [Unit]
           Description=VPN Portal Phase1 ReadOnly
