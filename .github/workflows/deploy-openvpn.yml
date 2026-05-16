@@ -350,6 +350,7 @@ jobs:
           Type=simple
           User=ec2-user
           WorkingDirectory=${APP_DIR}
+          Environment=PORTAL_VENV_DIR=/home/ec2-user/apps/.python-venv
           EnvironmentFile=${APP_DIR}/.env
           Environment=RUN_PORTAL_MANAGE_DEPS=0
           ExecStart=${APP_DIR}/run_portal.sh
