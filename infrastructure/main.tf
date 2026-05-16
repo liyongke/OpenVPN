@@ -1,14 +1,10 @@
 terraform {
-  backend "s3" {
-    bucket = "terraform-state-file-504329778344"
-    key    = "openvpn_deployment/terraform.tfstate"
-    region = "ap-southeast-1"
-  }
+  backend "s3" {}
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.0"
     }
   }
 }
@@ -72,7 +68,7 @@ data "aws_region" "current" {}
 
 resource "aws_key_pair" "openvpn_key" {
   key_name   = "OpenVPNKey"
-  public_key = file("${path.module}/openvpn-key.pub")
+  public_key = fileexists("${path.module}/openvpn-key.pub") ? file("${path.module}/openvpn-key.pub") : file("${path.module}/../keys/openvpn-key.pub")
 }
 
 # CloudWatch log group for VPC Flow Logs
@@ -305,7 +301,7 @@ resource "aws_budgets_budget" "monthly_cost_budget" {
 
   cost_filter {
     name   = "Region"
-    values = [data.aws_region.current.name]
+    values = [data.aws_region.current.region]
   }
 
   notification {
