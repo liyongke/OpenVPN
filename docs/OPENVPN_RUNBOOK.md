@@ -171,7 +171,7 @@ gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
 
 Post-deploy checks executed by workflow:
 - `vpn-portal-phase1` systemd service is restarted and verified as active.
-- Portal health endpoint responds on `http://127.0.0.1:8088/healthz`.
+- Portal health endpoint responds on `http://127.0.0.1:8088/healthz` (with bounded retry window after restart).
 - Exactly one `status` directive exists in each OpenVPN server config.
 - Status file mapping remains `status-tcp.log` for TCP and `status-udp.log` for UDP.
 - Device-hints `client-connect` hook remains enabled in both OpenVPN configs.
