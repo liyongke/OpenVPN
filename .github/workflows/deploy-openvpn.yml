@@ -402,6 +402,8 @@ jobs:
           if [[ "$HEALTH_OK" != "1" ]]; then
             echo "ERROR: Portal health check failed after restart wait window." >&2
             systemctl status --no-pager vpn-portal-phase1 || true
+            journalctl -u vpn-portal-phase1 -n 100 --no-pager || true
+            ss -ltnp | grep ':8088' || true
             exit 1
           fi
 
