@@ -62,15 +62,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install portal dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r openvpn_portal/requirements.txt
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r openvpn_portal/requirements.txt
 
       - name: Python syntax check
-        run: python -m compileall -q openvpn_portal
+        run: python3 -m compileall -q openvpn_portal
 
       - name: Shell syntax check
         shell: bash
@@ -235,22 +235,65 @@ jobs:
           tar -xzf /tmp/vpn-portal-phase1.tar.gz -C "$APP_DIR"
           chmod +x "$APP_DIR/run_portal.sh"
 
+          install_python313() {
+            if command -v python3.13 >/dev/null 2>&1; then
+              return 0
+            fi
+
+            if command -v dnf >/dev/null 2>&1; then
+              dnf install -y python3.13 python3.13-pip || true
+            elif command -v yum >/dev/null 2>&1; then
+              yum install -y python3.13 || true
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update -y
+              apt-get install -y python3.13 python3.13-venv || true
+            fi
+
+            if command -v python3.13 >/dev/null 2>&1; then
+              return 0
+            fi
+
+            if command -v yum >/dev/null 2>&1; then
+              yum install -y gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel wget tar
+            elif command -v dnf >/dev/null 2>&1; then
+              dnf install -y gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel wget tar
+            elif command -v apt-get >/dev/null 2>&1; then
+              apt-get update -y
+              apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev xz-utils wget tar
+            fi
+
+            PY_TGZ="/tmp/Python-3.13.3.tgz"
+            PY_SRC_DIR="/tmp/Python-3.13.3"
+            wget -q -O "$PY_TGZ" "https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tgz"
+            rm -rf "$PY_SRC_DIR"
+            tar -xzf "$PY_TGZ" -C /tmp
+            pushd "$PY_SRC_DIR" >/dev/null
+            ./configure --enable-optimizations
+            make -j"$(nproc)"
+            make altinstall
+            popd >/dev/null
+          }
+
+          install_python313
+
           # Service mode disables dependency installation at runtime.
           # Ensure the shared venv exists and has portal deps before restart.
           VENV_DIR="/home/ec2-user/apps/.python-venv"
-          if [[ ! -x "$VENV_DIR/bin/python3" && ! -x "$VENV_DIR/bin/python" ]]; then
-            runuser -u ec2-user -- python3 -m venv "$VENV_DIR"
+          PY313_BIN="$(command -v python3.13)"
+          if [[ ! -x "$VENV_DIR/bin/python3.13" && ! -x "$VENV_DIR/bin/python3" && ! -x "$VENV_DIR/bin/python" ]]; then
+            runuser -u ec2-user -- "$PY313_BIN" -m venv "$VENV_DIR"
           fi
 
-          VENV_PY="$VENV_DIR/bin/python3"
+          VENV_PY="$VENV_DIR/bin/python3.13"
+          if [[ ! -x "$VENV_PY" ]]; then
+            VENV_PY="$VENV_DIR/bin/python3"
+          fi
           if [[ ! -x "$VENV_PY" ]]; then
             VENV_PY="$VENV_DIR/bin/python"
           fi
 
-          if ! runuser -u ec2-user -- "$VENV_PY" -c 'import uvicorn' >/dev/null 2>&1; then
-            runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
-            runuser -u ec2-user -- "$VENV_PY" -m pip install -r "$APP_DIR/requirements.txt" >/dev/null
-          fi
+          runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
+          runuser -u ec2-user -- "$VENV_PY" -m pip install -r "$APP_DIR/requirements.txt" >/dev/null
 
           chown -R ec2-user:ec2-user "$VENV_DIR" || true
 
