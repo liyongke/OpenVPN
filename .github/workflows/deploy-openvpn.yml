@@ -252,14 +252,9 @@ jobs:
           UNIT_PATH_UDP="/etc/systemd/system/vpn-portal-udp.service"
           TS="$(date +%Y%m%d%H%M%S)"
           ROLLBACK_ARCHIVE="/home/ec2-user/apps/releases/vpn-portal-phase1-${TS}.tar.gz"
-          ENV_BACKUP_TCP="/tmp/vpn-portal-phase1-${TS}.env.tcp"
-          ENV_BACKUP_UDP="/tmp/vpn-portal-phase1-${TS}.env.udp"
 
           mkdir -p /home/ec2-user/apps/releases
           mkdir -p "$APP_DIR"
-
-          if [[ -f "$APP_DIR/.env.tcp" ]]; then cp "$APP_DIR/.env.tcp" "$ENV_BACKUP_TCP"; fi
-          if [[ -f "$APP_DIR/.env.udp" ]]; then cp "$APP_DIR/.env.udp" "$ENV_BACKUP_UDP"; fi
 
           if [[ "$(ls -A "$APP_DIR" 2>/dev/null || true)" != "" ]]; then
             tar -czf "$ROLLBACK_ARCHIVE" -C "$APP_DIR" .
@@ -342,31 +337,13 @@ jobs:
 
           chown -R ec2-user:ec2-user "$VENV_DIR" || true
 
-          # Restore .env.tcp / .env.udp from backup if wiped by the find step
-          if [[ -f "$ENV_BACKUP_TCP" && ! -f "$APP_DIR/.env.tcp" ]]; then
-            cp "$ENV_BACKUP_TCP" "$APP_DIR/.env.tcp"
-            chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
-            chmod 600 "$APP_DIR/.env.tcp"
-          fi
-          if [[ -f "$ENV_BACKUP_UDP" && ! -f "$APP_DIR/.env.udp" ]]; then
-            cp "$ENV_BACKUP_UDP" "$APP_DIR/.env.udp"
-            chown ec2-user:ec2-user "$APP_DIR/.env.udp"
-            chmod 600 "$APP_DIR/.env.udp"
-          fi
-
-          # Create default env files on first deploy (or after manual deletion)
-          if [[ ! -f "$APP_DIR/.env.tcp" ]]; then
-            printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.tcp"
-            chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
-            chmod 600 "$APP_DIR/.env.tcp"
-            echo "INFO: Created default .env.tcp"
-          fi
-          if [[ ! -f "$APP_DIR/.env.udp" ]]; then
-            printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.udp"
-            chown ec2-user:ec2-user "$APP_DIR/.env.udp"
-            chmod 600 "$APP_DIR/.env.udp"
-            echo "INFO: Created default .env.udp"
-          fi
+          # Always write env files so deploy-managed settings are never stale
+          printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.tcp"
+          chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
+          chmod 600 "$APP_DIR/.env.tcp"
+          printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.udp"
+          chown ec2-user:ec2-user "$APP_DIR/.env.udp"
+          chmod 600 "$APP_DIR/.env.udp"
 
           cat > "$UNIT_PATH_TCP" <<UNIT
           [Unit]
