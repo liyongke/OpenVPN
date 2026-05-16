@@ -302,6 +302,15 @@ resource "aws_iam_role_policy" "github_actions_deploy_policy" {
 
 data "aws_iam_policy_document" "github_actions_dev_policy" {
   statement {
+    sid    = "AllowEc2DescribeDev"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "AllowS3ArtifactAccessDev"
     effect = "Allow"
     actions = [
@@ -309,6 +318,19 @@ data "aws_iam_policy_document" "github_actions_dev_policy" {
       "s3:GetObject",
       "s3:AbortMultipartUpload",
       "s3:ListBucket"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowSsmDeployOpsDev"
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+      "ssm:GetCommandInvocation",
+      "ssm:ListCommandInvocations",
+      "ssm:ListCommands",
+      "ssm:DescribeInstanceInformation"
     ]
     resources = ["*"]
   }

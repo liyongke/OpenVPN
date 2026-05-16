@@ -157,15 +157,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: package
     if: |
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' ||
+      github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
-      )
+    env:
+      DEPLOY_ROLE: ${{ github.ref_name == 'main' && secrets.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME_DEV }}
     steps:
+      - name: Verify deploy OIDC role secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEPLOY_ROLE}" ]]; then
+            echo "ERROR: Missing OIDC role secret for branch '${{ github.ref_name }}'. Set AWS_ROLE_TO_ASSUME (main) or AWS_ROLE_TO_ASSUME_DEV (dev/*)" >&2
+            exit 1
+          fi
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Resolve deployment target
