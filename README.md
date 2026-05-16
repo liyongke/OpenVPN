@@ -108,6 +108,25 @@ terraform -chdir=infrastructure plan
 terraform -chdir=infrastructure apply
 ```
 
+## GitHub Actions CI/CD
+
+Workflow: `.github/workflows/deploy-openvpn.yml`
+
+What it does:
+- Validates Python, shell scripts, and Terraform on pull requests.
+- Packages `openvpn_portal/` on `main` and uploads a release artifact to S3.
+- Deploys to EC2 via AWS SSM on `main` (or manual dispatch), then runs health and OpenVPN guardrail checks.
+
+Required GitHub settings:
+- Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
+- Repository secret `ARTIFACT_S3_URI` (S3 prefix, for example `s3://<bucket>/<prefix>`).
+- Repository variable `AWS_REGION` (optional, defaults to `ap-southeast-1`).
+
+Manual dispatch inputs:
+- `deploy` (boolean): run or skip deployment.
+- `instance_id` (string): optional EC2 instance override.
+- `artifact_s3_uri` (string): optional S3 prefix override.
+
 ## Documentation Outline
 
 Start with summary pages, then follow links to task guides and deep runbooks.

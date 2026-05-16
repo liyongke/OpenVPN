@@ -137,6 +137,27 @@ aws ssm send-command \
 
 Expected: `active` and a listener on `0.0.0.0:443`.
 
+### 4.4 GitHub Actions CI/CD deployment
+
+Repository workflow: `.github/workflows/deploy-openvpn.yml`
+
+Pipeline behavior:
+1. Pull requests to `main`: validation only (Python compile, `bash -n`, Terraform validate).
+2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, deploy through SSM.
+3. Workflow dispatch: optional manual deploy with `instance_id` and `artifact_s3_uri` overrides.
+
+Required GitHub configuration:
+- Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
+- Secret: `ARTIFACT_S3_URI` (artifact prefix `s3://<bucket>/<path>`).
+- Variable: `AWS_REGION` (optional; default `ap-southeast-1`).
+
+Post-deploy checks executed by workflow:
+- `vpn-portal-phase1` systemd service is restarted and verified as active.
+- Portal health endpoint responds on `http://127.0.0.1:8088/healthz`.
+- Exactly one `status` directive exists in each OpenVPN server config.
+- Status file mapping remains `status-tcp.log` for TCP and `status-udp.log` for UDP.
+- Device-hints `client-connect` hook remains enabled in both OpenVPN configs.
+
 Production note:
 - Keep `openvpn-server@server.service` disabled to avoid bind conflicts on `443`.
 - Ensure status logging remains enabled in both configs:
