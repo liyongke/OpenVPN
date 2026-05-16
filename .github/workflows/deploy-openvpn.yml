@@ -328,7 +328,7 @@ jobs:
             rm -rf "$PY_SRC_DIR"
             tar -xzf "$PY_TGZ" -C /tmp
             pushd "$PY_SRC_DIR" >/dev/null
-            ./configure --enable-optimizations --with-openssl="$OPENSSL_PREFIX"
+            ./configure --with-openssl="$OPENSSL_PREFIX"
             make -j"$(nproc)"
             make altinstall
             popd >/dev/null
