@@ -274,71 +274,24 @@ jobs:
               python3.13 -c 'import ssl' >/dev/null 2>&1 && return 0
             fi
 
-            OPENSSL_PREFIX="/usr"
-            OPENSSL_INCLUDE=""
-            OPENSSL_LIB=""
+            PYTHON_ROOT="/opt/python-3.13"
+            PYTHON_TARBALL="/tmp/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
+            PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
 
-            if command -v dnf >/dev/null 2>&1; then
-              dnf install -y python3.13 python3.13-pip || true
-            elif command -v yum >/dev/null 2>&1; then
-              yum install -y python3.13 || true
-            elif command -v apt-get >/dev/null 2>&1; then
-              apt-get update -y
-              apt-get install -y python3.13 python3.13-venv || true
-            fi
+            rm -rf "$PYTHON_ROOT"
+            mkdir -p "$PYTHON_ROOT"
+            curl -fsSL -o "$PYTHON_TARBALL" "$PYTHON_URL"
+            tar -xzf "$PYTHON_TARBALL" -C "$PYTHON_ROOT"
 
-            if command -v python3.13 >/dev/null 2>&1; then
-              python3.13 -c 'import ssl' >/dev/null 2>&1 && return 0
-            fi
-
-            if command -v yum >/dev/null 2>&1; then
-              yum remove -y openssl-devel || true
-              yum install -y gcc make bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel wget tar openssl11 openssl11-devel
-              OPENSSL_INCLUDE="/usr/include/openssl11"
-              OPENSSL_LIB="/usr/lib64"
-            elif command -v dnf >/dev/null 2>&1; then
-              dnf install -y gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel wget tar
-              OPENSSL_INCLUDE="/usr/include"
-              OPENSSL_LIB="/usr/lib64"
-            elif command -v apt-get >/dev/null 2>&1; then
-              apt-get update -y
-              apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev xz-utils wget tar
-              OPENSSL_INCLUDE="/usr/include"
-              OPENSSL_LIB="/usr/lib/x86_64-linux-gnu"
-            fi
-
-            if command -v python3.13 >/dev/null 2>&1; then
-              python3.13 -c 'import ssl' >/dev/null 2>&1 && return 0
-            fi
-
-            if [[ -n "$OPENSSL_INCLUDE" && -d "$OPENSSL_INCLUDE" ]]; then
-              export CPPFLAGS="-I${OPENSSL_INCLUDE} ${CPPFLAGS:-}"
-            fi
-            if [[ -n "$OPENSSL_LIB" && -d "$OPENSSL_LIB" ]]; then
-              export LDFLAGS="-L${OPENSSL_LIB} ${LDFLAGS:-}"
-            fi
-
-            if command -v python3.13 >/dev/null 2>&1; then
-              python3.13 -c 'import ssl' >/dev/null 2>&1 && return 0
-            fi
-
-            PY_TGZ="/tmp/Python-3.13.3.tgz"
-            PY_SRC_DIR="/tmp/Python-3.13.3"
-            wget -q -O "$PY_TGZ" "https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tgz"
-            rm -rf "$PY_SRC_DIR"
-            tar -xzf "$PY_TGZ" -C /tmp
-            pushd "$PY_SRC_DIR" >/dev/null
-            ./configure --with-openssl="$OPENSSL_PREFIX"
-            make -j"$(nproc)"
-            make altinstall
-            popd >/dev/null
+            ln -sf "$PYTHON_ROOT/bin/python3.13" /usr/local/bin/python3.13
+            ln -sf "$PYTHON_ROOT/bin/pip3.13" /usr/local/bin/pip3.13
 
             if ! command -v python3.13 >/dev/null 2>&1; then
               echo "ERROR: python3.13 install completed but binary is missing" >&2
               exit 1
             fi
 
-            if ! python3.13 -c 'import ssl' >/dev/null 2>&1; then
+            if ! python3.13 -c 'import ssl; import sys; print(sys.version)' >/dev/null 2>&1; then
               echo "ERROR: python3.13 is installed but ssl module is unavailable" >&2
               exit 1
             fi
