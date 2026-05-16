@@ -248,24 +248,25 @@ jobs:
 
           APP_DIR="${APP_DIR}"
           ARTIFACT_URI="${ARTIFACT_S3_URI}"
-          UNIT_PATH="/etc/systemd/system/vpn-portal-phase1.service"
+          UNIT_PATH_TCP="/etc/systemd/system/vpn-portal-tcp.service"
+          UNIT_PATH_UDP="/etc/systemd/system/vpn-portal-udp.service"
           TS="$(date +%Y%m%d%H%M%S)"
           ROLLBACK_ARCHIVE="/home/ec2-user/apps/releases/vpn-portal-phase1-${TS}.tar.gz"
-          ENV_BACKUP="/tmp/vpn-portal-phase1-${TS}.env"
+          ENV_BACKUP_TCP="/tmp/vpn-portal-phase1-${TS}.env.tcp"
+          ENV_BACKUP_UDP="/tmp/vpn-portal-phase1-${TS}.env.udp"
 
           mkdir -p /home/ec2-user/apps/releases
           mkdir -p "$APP_DIR"
 
-          if [[ -f "$APP_DIR/.env" ]]; then
-            cp "$APP_DIR/.env" "$ENV_BACKUP"
-          fi
+          if [[ -f "$APP_DIR/.env.tcp" ]]; then cp "$APP_DIR/.env.tcp" "$ENV_BACKUP_TCP"; fi
+          if [[ -f "$APP_DIR/.env.udp" ]]; then cp "$APP_DIR/.env.udp" "$ENV_BACKUP_UDP"; fi
 
           if [[ "$(ls -A "$APP_DIR" 2>/dev/null || true)" != "" ]]; then
             tar -czf "$ROLLBACK_ARCHIVE" -C "$APP_DIR" .
           fi
 
           aws s3 cp "$ARTIFACT_URI" /tmp/vpn-portal-phase1.tar.gz
-          find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
+          find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name '.env.tcp' ! -name '.env.udp' ! -name 'data' -exec rm -rf {} +
           tar -xzf /tmp/vpn-portal-phase1.tar.gz -C "$APP_DIR"
           chmod +x "$APP_DIR/run_portal.sh"
           mkdir -p "$APP_DIR/data"
@@ -341,24 +342,35 @@ jobs:
 
           chown -R ec2-user:ec2-user "$VENV_DIR" || true
 
-          if [[ -f "$ENV_BACKUP" && ! -f "$APP_DIR/.env" ]]; then
-            cp "$ENV_BACKUP" "$APP_DIR/.env"
-            chown ec2-user:ec2-user "$APP_DIR/.env" || true
-            chmod 600 "$APP_DIR/.env" || true
+          # Restore .env.tcp / .env.udp from backup if wiped by the find step
+          if [[ -f "$ENV_BACKUP_TCP" && ! -f "$APP_DIR/.env.tcp" ]]; then
+            cp "$ENV_BACKUP_TCP" "$APP_DIR/.env.tcp"
+            chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
+            chmod 600 "$APP_DIR/.env.tcp"
+          fi
+          if [[ -f "$ENV_BACKUP_UDP" && ! -f "$APP_DIR/.env.udp" ]]; then
+            cp "$ENV_BACKUP_UDP" "$APP_DIR/.env.udp"
+            chown ec2-user:ec2-user "$APP_DIR/.env.udp"
+            chmod 600 "$APP_DIR/.env.udp"
           fi
 
-          # Create a safe default .env if still missing (first deploy / no prior backup).
-          # systemd EnvironmentFile= (no leading -) will hard-fail if the file is absent.
-          if [[ ! -f "$APP_DIR/.env" ]]; then
-            printf 'PORTAL_HOST=0.0.0.0\nPORTAL_PORT=8088\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\n' > "$APP_DIR/.env"
-            chown ec2-user:ec2-user "$APP_DIR/.env"
-            chmod 600 "$APP_DIR/.env"
-            echo "INFO: Created default .env (no prior backup found)."
+          # Create default env files on first deploy (or after manual deletion)
+          if [[ ! -f "$APP_DIR/.env.tcp" ]]; then
+            printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal - TCP\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history-tcp.sqlite3\n' > "$APP_DIR/.env.tcp"
+            chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
+            chmod 600 "$APP_DIR/.env.tcp"
+            echo "INFO: Created default .env.tcp"
+          fi
+          if [[ ! -f "$APP_DIR/.env.udp" ]]; then
+            printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal - UDP\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history-udp.sqlite3\n' > "$APP_DIR/.env.udp"
+            chown ec2-user:ec2-user "$APP_DIR/.env.udp"
+            chmod 600 "$APP_DIR/.env.udp"
+            echo "INFO: Created default .env.udp"
           fi
 
-          cat > "$UNIT_PATH" <<UNIT
+          cat > "$UNIT_PATH_TCP" <<UNIT
           [Unit]
-          Description=VPN Portal Phase1 ReadOnly
+          Description=VPN Portal - TCP
           After=network-online.target
           Wants=network-online.target
 
@@ -367,7 +379,7 @@ jobs:
           User=ec2-user
           WorkingDirectory=${APP_DIR}
           Environment=PORTAL_VENV_DIR=/home/ec2-user/apps/.python-venv
-          EnvironmentFile=${APP_DIR}/.env
+          EnvironmentFile=${APP_DIR}/.env.tcp
           Environment=RUN_PORTAL_MANAGE_DEPS=0
           ExecStart=${APP_DIR}/run_portal.sh
           Restart=always
@@ -377,30 +389,60 @@ jobs:
           WantedBy=multi-user.target
           UNIT
 
-          chown root:root "$UNIT_PATH"
-          chmod 644 "$UNIT_PATH"
+          cat > "$UNIT_PATH_UDP" <<UNIT
+          [Unit]
+          Description=VPN Portal - UDP
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=ec2-user
+          WorkingDirectory=${APP_DIR}
+          Environment=PORTAL_VENV_DIR=/home/ec2-user/apps/.python-venv
+          EnvironmentFile=${APP_DIR}/.env.udp
+          Environment=RUN_PORTAL_MANAGE_DEPS=0
+          ExecStart=${APP_DIR}/run_portal.sh
+          Restart=always
+          RestartSec=3
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          chown root:root "$UNIT_PATH_TCP" "$UNIT_PATH_UDP"
+          chmod 644 "$UNIT_PATH_TCP" "$UNIT_PATH_UDP"
+
+          # Stop and disable old combined service if still present
+          if systemctl is-enabled --quiet vpn-portal-phase1 2>/dev/null; then
+            systemctl disable vpn-portal-phase1 >/dev/null
+          fi
+          if systemctl is-active --quiet vpn-portal-phase1 2>/dev/null; then
+            systemctl stop vpn-portal-phase1
+          fi
 
           systemctl daemon-reload
-          systemctl enable vpn-portal-phase1 >/dev/null
-          systemctl restart vpn-portal-phase1
+          systemctl enable vpn-portal-tcp vpn-portal-udp >/dev/null
+          systemctl restart vpn-portal-tcp vpn-portal-udp
 
           sleep 5
 
-          SERVICE_OK=0
-          for _ in $(seq 1 90); do
-            if systemctl is-active --quiet vpn-portal-phase1; then
-              SERVICE_OK=1
-              break
+          for SVC in vpn-portal-tcp vpn-portal-udp; do
+            SERVICE_OK=0
+            for _ in $(seq 1 90); do
+              if systemctl is-active --quiet "$SVC"; then
+                SERVICE_OK=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$SERVICE_OK" != "1" ]]; then
+              echo "ERROR: $SVC did not reach active state." >&2
+              systemctl status --no-pager "$SVC" || true
+              journalctl -u "$SVC" -n 100 --no-pager || true
+              exit 1
             fi
-            sleep 1
           done
-
-          if [[ "$SERVICE_OK" != "1" ]]; then
-            echo "ERROR: Portal service did not reach active state." >&2
-            systemctl status --no-pager vpn-portal-phase1 || true
-            journalctl -u vpn-portal-phase1 -n 100 --no-pager || true
-            exit 1
-          fi
 
           echo "== OPENVPN STATUS DIRECTIVES =="
           grep -nE '^status ' /etc/openvpn/server-tcp.conf
@@ -419,25 +461,25 @@ jobs:
           grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-tcp.conf
           grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-udp.conf
 
-          systemctl is-active vpn-portal-phase1
+          systemctl is-active vpn-portal-tcp
+          systemctl is-active vpn-portal-udp
 
-          # The service can take a few seconds after restart before binding.
-          HEALTH_OK=0
-          for _ in $(seq 1 90); do
-            if curl -fsS --max-time 5 http://127.0.0.1:8088/healthz >/dev/null; then
-              HEALTH_OK=1
-              break
+          # Health check both portal endpoints
+          for BIND_IP in 10.9.0.1 10.8.0.1; do
+            HEALTH_OK=0
+            for _ in $(seq 1 90); do
+              if curl -fsS --max-time 5 "http://${BIND_IP}:8088/healthz" >/dev/null; then
+                HEALTH_OK=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$HEALTH_OK" != "1" ]]; then
+              echo "ERROR: Portal health check failed for http://${BIND_IP}:8088/healthz" >&2
+              ss -ltnp | grep ':8088' || true
+              exit 1
             fi
-            sleep 1
           done
-
-          if [[ "$HEALTH_OK" != "1" ]]; then
-            echo "ERROR: Portal health check failed after restart wait window." >&2
-            systemctl status --no-pager vpn-portal-phase1 || true
-            journalctl -u vpn-portal-phase1 -n 100 --no-pager || true
-            ss -ltnp | grep ':8088' || true
-            exit 1
-          fi
 
           echo "ROLLBACK_ARCHIVE=${ROLLBACK_ARCHIVE}"
           EOF
