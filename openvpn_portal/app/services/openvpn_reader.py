@@ -307,6 +307,185 @@ def _fmt_mib(value_bytes: int) -> float:
     return round(value_bytes / 1024 / 1024, 2)
 
 
+def _session_identity(username: str, common_name: str) -> str:
+    identity = (username or "").strip()
+    if identity:
+        return identity
+    return (common_name or "").strip()
+
+
+def _audit_session(
+    *,
+    username: str,
+    common_name: str,
+    real_address: str,
+    virtual_address: str,
+    bytes_received: int,
+    bytes_sent: int,
+) -> tuple[bool, list[str]]:
+    flags: list[str] = []
+
+    identity = _session_identity(username, common_name).lower()
+    if not identity or identity in {"undef", "unknown", "anonymous"}:
+        flags.append("unidentified")
+
+    if not (real_address or "").strip():
+        flags.append("missing_real_address")
+
+    if not (virtual_address or "").strip():
+        flags.append("missing_virtual_address")
+
+    if int(bytes_received) <= 0 and int(bytes_sent) <= 0:
+        flags.append("zero_traffic")
+
+    trusted = True
+    if "unidentified" in flags:
+        trusted = False
+    if "missing_real_address" in flags:
+        trusted = False
+    if "zero_traffic" in flags and "missing_virtual_address" in flags:
+        trusted = False
+
+    return trusted, flags
+
+
+def _empty_summary() -> dict[str, Any]:
+    return {
+        "active_clients": 0,
+        "raw_active_clients": 0,
+        "trusted_active_clients": 0,
+        "suspect_active_clients": 0,
+        "total_bytes_received": 0,
+        "total_bytes_sent": 0,
+        "total_mib_received": 0.0,
+        "total_mib_sent": 0.0,
+        "user_usage": [],
+        "trusted_user_usage": [],
+        "protocol_breakdown": {"tcp": 0, "udp": 0, "unknown": 0},
+        "device_breakdown": {"phone": 0, "pc": 0, "unknown": 0},
+        "trusted_device_breakdown": {"phone": 0, "pc": 0, "unknown": 0},
+        "unique_real_endpoints_raw": 0,
+        "unique_real_endpoints_trusted": 0,
+        "unique_identities_trusted": 0,
+        "audit_flag_counts": {
+            "unidentified": 0,
+            "missing_real_address": 0,
+            "missing_virtual_address": 0,
+            "zero_traffic": 0,
+        },
+    }
+
+
+def _summarize_sessions(sessions: list[dict[str, Any]]) -> dict[str, Any]:
+    total_rx = sum(int(s.get("bytes_received", 0)) for s in sessions)
+    total_tx = sum(int(s.get("bytes_sent", 0)) for s in sessions)
+
+    by_user: dict[str, dict[str, Any]] = {}
+    trusted_by_user: dict[str, dict[str, Any]] = {}
+    protocol_breakdown = {"tcp": 0, "udp": 0, "unknown": 0}
+    device_breakdown = {"phone": 0, "pc": 0, "unknown": 0}
+    trusted_device_breakdown = {"phone": 0, "pc": 0, "unknown": 0}
+    audit_flag_counts = {
+        "unidentified": 0,
+        "missing_real_address": 0,
+        "missing_virtual_address": 0,
+        "zero_traffic": 0,
+    }
+
+    trusted_sessions = 0
+    real_endpoints_raw: set[str] = set()
+    real_endpoints_trusted: set[str] = set()
+    trusted_identities: set[str] = set()
+
+    for s in sessions:
+        username = str(s.get("username", "")) or str(s.get("common_name", "unknown"))
+        item = by_user.setdefault(
+            username,
+            {
+                "username": username,
+                "session_count": 0,
+                "bytes_received": 0,
+                "bytes_sent": 0,
+                "mib_received": 0.0,
+                "mib_sent": 0.0,
+            },
+        )
+        item["session_count"] += 1
+        item["bytes_received"] += int(s.get("bytes_received", 0))
+        item["bytes_sent"] += int(s.get("bytes_sent", 0))
+        item["mib_received"] = _fmt_mib(item["bytes_received"])
+        item["mib_sent"] = _fmt_mib(item["bytes_sent"])
+
+        proto = str(s.get("protocol", "unknown"))
+        protocol_breakdown[proto if proto in protocol_breakdown else "unknown"] += 1
+
+        device = str(s.get("device_type", "unknown"))
+        device_breakdown[device if device in device_breakdown else "unknown"] += 1
+
+        real_address = str(s.get("real_address", "")).strip()
+        if real_address:
+            real_endpoints_raw.add(real_address)
+
+        for flag in s.get("audit_flags", []):
+            if flag in audit_flag_counts:
+                audit_flag_counts[flag] += 1
+
+        if bool(s.get("trusted_session", False)):
+            trusted_sessions += 1
+            trusted_item = trusted_by_user.setdefault(
+                username,
+                {
+                    "username": username,
+                    "session_count": 0,
+                    "bytes_received": 0,
+                    "bytes_sent": 0,
+                    "mib_received": 0.0,
+                    "mib_sent": 0.0,
+                },
+            )
+            trusted_item["session_count"] += 1
+            trusted_item["bytes_received"] += int(s.get("bytes_received", 0))
+            trusted_item["bytes_sent"] += int(s.get("bytes_sent", 0))
+            trusted_item["mib_received"] = _fmt_mib(trusted_item["bytes_received"])
+            trusted_item["mib_sent"] = _fmt_mib(trusted_item["bytes_sent"])
+
+            trusted_device_breakdown[device if device in trusted_device_breakdown else "unknown"] += 1
+            if real_address:
+                real_endpoints_trusted.add(real_address)
+
+            identity = _session_identity(str(s.get("username", "")), str(s.get("common_name", ""))).strip()
+            if identity and identity.lower() not in {"undef", "unknown", "anonymous"}:
+                trusted_identities.add(identity)
+
+    user_usage = sorted(by_user.values(), key=lambda x: x["bytes_received"] + x["bytes_sent"], reverse=True)
+    trusted_user_usage = sorted(
+        trusted_by_user.values(),
+        key=lambda x: x["bytes_received"] + x["bytes_sent"],
+        reverse=True,
+    )
+
+    raw_active_clients = len(sessions)
+    return {
+        "active_clients": raw_active_clients,
+        "raw_active_clients": raw_active_clients,
+        "trusted_active_clients": trusted_sessions,
+        "suspect_active_clients": max(0, raw_active_clients - trusted_sessions),
+        "total_bytes_received": total_rx,
+        "total_bytes_sent": total_tx,
+        "total_mib_received": _fmt_mib(total_rx),
+        "total_mib_sent": _fmt_mib(total_tx),
+        "user_usage": user_usage,
+        "trusted_user_usage": trusted_user_usage,
+        "protocol_breakdown": protocol_breakdown,
+        "device_breakdown": device_breakdown,
+        "trusted_device_breakdown": trusted_device_breakdown,
+        "unique_real_endpoints_raw": len(real_endpoints_raw),
+        "unique_real_endpoints_trusted": len(real_endpoints_trusted),
+        "unique_identities_trusted": len(trusted_identities),
+        "audit_flag_counts": audit_flag_counts,
+    }
+
+
 def load_openvpn_status(
     status_file: str,
     device_hints: dict[str, dict[str, tuple[str, str]]] | None = None,
@@ -335,15 +514,7 @@ def load_openvpn_status(
             "status_exists": False,
             "updated_at": "",
             "sessions": [],
-            "summary": {
-                "active_clients": 0,
-                "total_bytes_received": 0,
-                "total_bytes_sent": 0,
-                "total_mib_received": 0.0,
-                "total_mib_sent": 0.0,
-                "protocol_breakdown": {"tcp": 0, "udp": 0, "unknown": 0},
-                "device_breakdown": {"phone": 0, "pc": 0, "unknown": 0},
-            },
+            "summary": _empty_summary(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -364,15 +535,7 @@ def load_openvpn_status(
             "status_exists": False,
             "updated_at": "",
             "sessions": [],
-            "summary": {
-                "active_clients": 0,
-                "total_bytes_received": 0,
-                "total_bytes_sent": 0,
-                "total_mib_received": 0.0,
-                "total_mib_sent": 0.0,
-                "protocol_breakdown": {"tcp": 0, "udp": 0, "unknown": 0},
-                "device_breakdown": {"phone": 0, "pc": 0, "unknown": 0},
-            },
+            "summary": _empty_summary(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -381,50 +544,18 @@ def load_openvpn_status(
     else:
         sessions, updated_at = _parse_legacy_status(lines, protocol=protocol, source_file=str(path), device_hints=hints)
 
-    total_rx = sum(s.bytes_received for s in sessions)
-    total_tx = sum(s.bytes_sent for s in sessions)
-
-    protocol_breakdown = {"tcp": 0, "udp": 0, "unknown": 0}
-    device_breakdown = {"phone": 0, "pc": 0, "unknown": 0}
+    session_dicts: list[dict[str, Any]] = []
     for s in sessions:
-        protocol_breakdown[s.protocol if s.protocol in protocol_breakdown else "unknown"] += 1
-        device_breakdown[s.device_type if s.device_type in device_breakdown else "unknown"] += 1
-
-    by_user: dict[str, dict[str, Any]] = {}
-    for s in sessions:
-        item = by_user.setdefault(
-            s.username,
-            {
-                "username": s.username,
-                "session_count": 0,
-                "bytes_received": 0,
-                "bytes_sent": 0,
-                "mib_received": 0.0,
-                "mib_sent": 0.0,
-            },
+        trusted, flags = _audit_session(
+            username=s.username,
+            common_name=s.common_name,
+            real_address=s.real_address,
+            virtual_address=s.virtual_address,
+            bytes_received=s.bytes_received,
+            bytes_sent=s.bytes_sent,
         )
-        item["session_count"] += 1
-        item["bytes_received"] += s.bytes_received
-        item["bytes_sent"] += s.bytes_sent
-        item["mib_received"] = _fmt_mib(item["bytes_received"])
-        item["mib_sent"] = _fmt_mib(item["bytes_sent"])
 
-    user_usage = sorted(by_user.values(), key=lambda x: x["bytes_received"] + x["bytes_sent"], reverse=True)
-
-    return {
-        "status_file": str(path),
-        "status_sources": [
-            {
-                "path": str(path),
-                "protocol": protocol,
-                "exists": True,
-                "session_count": len(sessions),
-                "updated_at": updated_at,
-            }
-        ],
-        "status_exists": True,
-        "updated_at": updated_at,
-        "sessions": [
+        session_dicts.append(
             {
                 "common_name": s.common_name,
                 "real_address": s.real_address,
@@ -440,19 +571,29 @@ def load_openvpn_status(
                 "source_file": s.source_file,
                 "device_type": s.device_type,
                 "device_platform": s.device_platform,
+                "trusted_session": trusted,
+                "audit_class": "trusted" if trusted else "suspect",
+                "audit_flags": flags,
             }
-            for s in sessions
+        )
+
+    summary = _summarize_sessions(session_dicts)
+
+    return {
+        "status_file": str(path),
+        "status_sources": [
+            {
+                "path": str(path),
+                "protocol": protocol,
+                "exists": True,
+                "session_count": len(session_dicts),
+                "updated_at": updated_at,
+            }
         ],
-        "summary": {
-            "active_clients": len(sessions),
-            "total_bytes_received": total_rx,
-            "total_bytes_sent": total_tx,
-            "total_mib_received": _fmt_mib(total_rx),
-            "total_mib_sent": _fmt_mib(total_tx),
-            "user_usage": user_usage,
-            "protocol_breakdown": protocol_breakdown,
-            "device_breakdown": device_breakdown,
-        },
+        "status_exists": True,
+        "updated_at": updated_at,
+        "sessions": session_dicts,
+        "summary": summary,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -470,39 +611,28 @@ def load_openvpn_status_multi(status_files: list[str], device_hints_file: str = 
         merged_sessions.extend(payload.get("sessions", []))
         status_sources.extend(payload.get("status_sources", []))
 
-    total_rx = sum(int(s.get("bytes_received", 0)) for s in merged_sessions)
-    total_tx = sum(int(s.get("bytes_sent", 0)) for s in merged_sessions)
-
-    by_user: dict[str, dict[str, Any]] = {}
-    protocol_breakdown = {"tcp": 0, "udp": 0, "unknown": 0}
-    device_breakdown = {"phone": 0, "pc": 0, "unknown": 0}
-
+    normalized_sessions: list[dict[str, Any]] = []
     for s in merged_sessions:
-        username = str(s.get("username", "")) or str(s.get("common_name", "unknown"))
-        item = by_user.setdefault(
-            username,
-            {
-                "username": username,
-                "session_count": 0,
-                "bytes_received": 0,
-                "bytes_sent": 0,
-                "mib_received": 0.0,
-                "mib_sent": 0.0,
-            },
-        )
-        item["session_count"] += 1
-        item["bytes_received"] += int(s.get("bytes_received", 0))
-        item["bytes_sent"] += int(s.get("bytes_sent", 0))
-        item["mib_received"] = _fmt_mib(item["bytes_received"])
-        item["mib_sent"] = _fmt_mib(item["bytes_sent"])
+        trusted = bool(s.get("trusted_session", False))
+        flags_value = s.get("audit_flags", [])
+        flags = flags_value if isinstance(flags_value, list) else []
+        if not flags and "trusted_session" not in s:
+            trusted, flags = _audit_session(
+                username=str(s.get("username", "")),
+                common_name=str(s.get("common_name", "")),
+                real_address=str(s.get("real_address", "")),
+                virtual_address=str(s.get("virtual_address", "")),
+                bytes_received=int(s.get("bytes_received", 0)),
+                bytes_sent=int(s.get("bytes_sent", 0)),
+            )
 
-        proto = str(s.get("protocol", "unknown"))
-        protocol_breakdown[proto if proto in protocol_breakdown else "unknown"] += 1
+        normalized = dict(s)
+        normalized["trusted_session"] = trusted
+        normalized["audit_class"] = "trusted" if trusted else "suspect"
+        normalized["audit_flags"] = flags
+        normalized_sessions.append(normalized)
 
-        device = str(s.get("device_type", "unknown"))
-        device_breakdown[device if device in device_breakdown else "unknown"] += 1
-
-    user_usage = sorted(by_user.values(), key=lambda x: x["bytes_received"] + x["bytes_sent"], reverse=True)
+    summary = _summarize_sessions(normalized_sessions)
 
     existing_sources = [s for s in status_sources if s.get("exists")]
     updated_candidates = [str(s.get("updated_at", "")) for s in existing_sources if str(s.get("updated_at", ""))]
@@ -512,16 +642,7 @@ def load_openvpn_status_multi(status_files: list[str], device_hints_file: str = 
         "status_sources": status_sources,
         "status_exists": any(bool(s.get("exists")) for s in status_sources),
         "updated_at": updated_candidates[0] if updated_candidates else "",
-        "sessions": merged_sessions,
-        "summary": {
-            "active_clients": len(merged_sessions),
-            "total_bytes_received": total_rx,
-            "total_bytes_sent": total_tx,
-            "total_mib_received": _fmt_mib(total_rx),
-            "total_mib_sent": _fmt_mib(total_tx),
-            "user_usage": user_usage,
-            "protocol_breakdown": protocol_breakdown,
-            "device_breakdown": device_breakdown,
-        },
+        "sessions": normalized_sessions,
+        "summary": summary,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

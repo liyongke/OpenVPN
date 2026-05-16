@@ -10,6 +10,7 @@ This page is the high-level entrypoint. Full procedures and incident details are
 - Operational automation scripts (`scripts/`)
 - Client profiles and local client control scripts (`clients/`, `vpn.sh`, `vpn.ps1`, `vpn.cmd`)
 - Read-only OpenVPN operations portal (`openvpn_portal/`)
+- Audit-aware portal metrics (raw vs trusted session counts) for clearer incident triage
 - Structured documentation with summary and deep-dive layers (`docs/`)
 
 ## Architecture At a Glance

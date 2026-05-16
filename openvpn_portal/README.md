@@ -13,17 +13,24 @@ This folder contains an isolated portal MVP that does not modify OpenVPN service
 
 - Active sessions from OpenVPN status file.
 - Current snapshot traffic per session and per user.
-- Summary cards for active clients, total download, and total upload.
+- Summary cards for raw/trusted/suspect sessions, total download, and total upload.
+- Dual audit-aware session metrics: raw active sessions and trusted active sessions.
 - Live auto-refresh dashboard updates using server-sent events (SSE).
 - Built-in daily history for the last 7 days (SQLite-backed snapshots).
 - Status Source panel shows configured status files once, with per-source protocol/session details and links to the status viewer.
 - Per-session protocol (TCP/UDP) and device hints (phone/pc/unknown).
+- Per-session audit classification with flags (for example `unidentified`, `zero_traffic`).
 - History panel is placed at the bottom of the dashboard for cleaner top-level monitoring.
 
 Device identification note:
 - OpenVPN status files do not include a reliable phone/pc field by default.
 - The portal falls back to best-effort inference from usernames/common names only when no hints exist.
 - Accurate labels come from the server-side device hints file and are matched by real endpoint first (`ip:port`), then by real IP, username, and common name.
+
+Audit/stability note:
+- `active_clients` remains the raw count of status-file sessions.
+- `trusted_active_clients` excludes sessions that are clearly not stable/authenticated (for example unidentified plus zero traffic/no virtual IP).
+- `suspect_active_clients` tracks sessions removed from trusted counts so anomalies remain visible instead of hidden.
 
 ## What it does not do yet
 

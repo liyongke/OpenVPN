@@ -19,8 +19,16 @@
 
     <section class="cards cards-main">
       <article class="card">
-        <h2>Active Clients</h2>
+        <h2>Active Sessions (Raw)</h2>
         <p class="metric" id="metric-active">{{ payload.summary.active_clients }}</p>
+      </article>
+      <article class="card">
+        <h2>Trusted Sessions</h2>
+        <p class="metric" id="metric-trusted">{{ payload.summary.trusted_active_clients if payload.summary.trusted_active_clients is defined else payload.summary.active_clients }}</p>
+      </article>
+      <article class="card">
+        <h2>Suspect Sessions</h2>
+        <p class="metric" id="metric-suspect">{{ payload.summary.suspect_active_clients if payload.summary.suspect_active_clients is defined else 0 }}</p>
       </article>
       <article class="card">
         <h2>Total Download</h2>
@@ -38,9 +46,14 @@
 
     <section class="cards cards-sub">
       <article class="card">
-        <h2>Device Mix</h2>
-        <p class="metric small" id="metric-device">Phone {{ payload.summary.device_breakdown.phone if payload.summary.device_breakdown else 0 }} / PC {{ payload.summary.device_breakdown.pc if payload.summary.device_breakdown else 0 }} / Unknown {{ payload.summary.device_breakdown.unknown if payload.summary.device_breakdown else 0 }}</p>
-        <p class="hint">Derived from client/common-name hints; unknown means OpenVPN status data did not identify device type.</p>
+        <h2>Device Mix (Trusted)</h2>
+        <p class="metric small" id="metric-device">Phone {{ payload.summary.trusted_device_breakdown.phone if payload.summary.trusted_device_breakdown else 0 }} / PC {{ payload.summary.trusted_device_breakdown.pc if payload.summary.trusted_device_breakdown else 0 }} / Unknown {{ payload.summary.trusted_device_breakdown.unknown if payload.summary.trusted_device_breakdown else 0 }}</p>
+        <p class="hint">Trusted sessions exclude clearly unauthenticated/noise entries. Raw device counts remain available via API summary.</p>
+      </article>
+      <article class="card">
+        <h2>Trusted Identity Coverage</h2>
+        <p class="metric small" id="metric-identities">Identities {{ payload.summary.unique_identities_trusted if payload.summary.unique_identities_trusted is defined else 0 }} / Endpoints {{ payload.summary.unique_real_endpoints_trusted if payload.summary.unique_real_endpoints_trusted is defined else 0 }}</p>
+        <p class="hint">Useful audit baseline for real user/device diversity versus transient endpoint storms.</p>
       </article>
     </section>
 
@@ -80,6 +93,7 @@
               <th>Upload (MiB)</th>
               <th>Connected Since</th>
               <th>Connected (min)</th>
+              <th>Audit</th>
             </tr>
           </thead>
           <tbody id="sessions-body">
@@ -97,11 +111,12 @@
               <td>{{ session.mib_sent }}</td>
               <td>{{ session.connected_since }}</td>
               <td>{{ session.connected_for_minutes if session.connected_for_minutes is not none else 'n/a' }}</td>
+              <td>{{ session.audit_class if session.audit_class is defined else 'trusted' }}{% if session.audit_flags is defined and session.audit_flags %} ({{ session.audit_flags|join(', ') }}){% endif %}</td>
             </tr>
             {% endfor %}
             {% else %}
             <tr>
-              <td colspan="11">No active sessions found in status file.</td>
+              <td colspan="12">No active sessions found in status file.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -150,8 +165,10 @@
             <tr>
               <th>Day (UTC)</th>
               <th>Samples</th>
-              <th>Peak Active</th>
-              <th>Avg Active</th>
+              <th>Peak Active (Raw)</th>
+              <th>Peak Active (Trusted)</th>
+              <th>Peak Suspect</th>
+              <th>Avg Active (Trusted)</th>
               <th>Max Download Snapshot (MiB)</th>
               <th>Max Upload Snapshot (MiB)</th>
               <th>Last Sample</th>
@@ -159,7 +176,7 @@
           </thead>
           <tbody id="history-body">
             <tr>
-              <td colspan="7">Collecting history data...</td>
+              <td colspan="9">Collecting history data...</td>
             </tr>
           </tbody>
         </table>
@@ -181,7 +198,7 @@
       if (!body) return;
 
       if (!sessions || sessions.length === 0) {
-        body.innerHTML = '<tr><td colspan="11">No active sessions found in status file.</td></tr>';
+        body.innerHTML = '<tr><td colspan="12">No active sessions found in status file.</td></tr>';
         return;
       }
 
@@ -198,6 +215,7 @@
           <td>${s.mib_sent}</td>
           <td>${s.connected_since}</td>
           <td>${s.connected_for_minutes === null || s.connected_for_minutes === undefined ? 'n/a' : s.connected_for_minutes}</td>
+          <td>${s.audit_class || 'trusted'}${s.audit_flags && s.audit_flags.length ? ` (${s.audit_flags.join(', ')})` : ''}</td>
         </tr>
       `).join("");
     }
@@ -223,12 +241,17 @@
 
     function applySnapshot(payload) {
       setText("metric-active", payload.summary.active_clients);
+      setText("metric-trusted", payload.summary.trusted_active_clients ?? payload.summary.active_clients);
+      setText("metric-suspect", payload.summary.suspect_active_clients ?? 0);
       setText("metric-download", `${payload.summary.total_mib_received} MiB`);
       setText("metric-upload", `${payload.summary.total_mib_sent} MiB`);
       const proto = payload.summary.protocol_breakdown || { tcp: 0, udp: 0 };
       setText("metric-protocol", `TCP ${proto.tcp || 0} / UDP ${proto.udp || 0}`);
-      const dev = payload.summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
+      const dev = payload.summary.trusted_device_breakdown || payload.summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
       setText("metric-device", `Phone ${dev.phone || 0} / PC ${dev.pc || 0} / Unknown ${dev.unknown || 0}`);
+      const trustedIdentities = payload.summary.unique_identities_trusted ?? 0;
+      const trustedEndpoints = payload.summary.unique_real_endpoints_trusted ?? 0;
+      setText("metric-identities", `Identities ${trustedIdentities} / Endpoints ${trustedEndpoints}`);
 
       setText("status-exists", String(payload.status_exists));
       setText("status-updated", payload.updated_at || "n/a");
@@ -274,7 +297,7 @@
       const innerW = width - pad.left - pad.right;
       const innerH = height - pad.top - pad.bottom;
 
-      const peakMax = Math.max(1, ...ordered.map((d) => Number(d.peak_active_clients || 0)));
+      const peakMax = Math.max(1, ...ordered.map((d) => Number(d.peak_trusted_active_clients || d.peak_active_clients || 0)));
       const trafficMax = Math.max(1, ...ordered.map((d) => Number(d.max_total_mib_received || 0) + Number(d.max_total_mib_sent || 0)));
       const slot = innerW / ordered.length;
       const barW = Math.max(18, slot * 0.5);
@@ -291,7 +314,7 @@
 
       const points = ordered
         .map((d, i) => {
-          const clients = Number(d.peak_active_clients || 0);
+          const clients = Number(d.peak_trusted_active_clients || d.peak_active_clients || 0);
           const x = Math.round(pad.left + i * slot + slot / 2);
           const y = Math.round(pad.top + innerH - (clients / peakMax) * innerH);
           return `${x},${y}`;
@@ -300,10 +323,12 @@
 
       const lineDots = ordered
         .map((d, i) => {
-          const clients = Number(d.peak_active_clients || 0);
+          const clients = Number(d.peak_trusted_active_clients || d.peak_active_clients || 0);
+          const raw = Number(d.peak_active_clients || 0);
+          const suspect = Number(d.peak_suspect_active_clients || 0);
           const x = Math.round(pad.left + i * slot + slot / 2);
           const y = Math.round(pad.top + innerH - (clients / peakMax) * innerH);
-          return `<circle cx="${x}" cy="${y}" r="3.5" class="hist-dot"><title>${d.day}: peak ${clients}</title></circle>`;
+          return `<circle cx="${x}" cy="${y}" r="3.5" class="hist-dot"><title>${d.day}: trusted peak ${clients}, raw peak ${raw}, suspect peak ${suspect}</title></circle>`;
         })
         .join("");
 
@@ -326,7 +351,7 @@
         </svg>
         <div class="hist-legend">
           <span><i class="legend-swatch bar"></i> Daily max traffic snapshot (MiB)</span>
-          <span><i class="legend-swatch line"></i> Daily peak active clients</span>
+          <span><i class="legend-swatch line"></i> Daily peak trusted sessions</span>
         </div>
       `;
     }
@@ -345,7 +370,7 @@
         const days = data.days || [];
         renderHistoryChart(days);
         if (!days.length) {
-          body.innerHTML = '<tr><td colspan="7">No history yet. This table fills as snapshots are collected.</td></tr>';
+          body.innerHTML = '<tr><td colspan="9">No history yet. This table fills as snapshots are collected.</td></tr>';
           return;
         }
 
@@ -354,7 +379,9 @@
             <td>${d.day}</td>
             <td>${d.sample_count}</td>
             <td>${d.peak_active_clients}</td>
-            <td>${d.avg_active_clients}</td>
+            <td>${d.peak_trusted_active_clients ?? d.peak_active_clients}</td>
+            <td>${d.peak_suspect_active_clients ?? 0}</td>
+            <td>${d.avg_trusted_active_clients ?? d.avg_active_clients}</td>
             <td>${d.max_total_mib_received}</td>
             <td>${d.max_total_mib_sent}</td>
             <td>${d.last_sampled_at || 'n/a'}</td>
@@ -362,7 +389,7 @@
         `).join("");
       } catch (err) {
         renderHistoryChart([]);
-        body.innerHTML = '<tr><td colspan="7">Failed to load history data.</td></tr>';
+        body.innerHTML = '<tr><td colspan="9">Failed to load history data.</td></tr>';
       }
     }
 

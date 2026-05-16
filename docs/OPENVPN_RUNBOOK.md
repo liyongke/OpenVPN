@@ -347,6 +347,17 @@ allow-deprecated-insecure-static-crypto
 
 ### Issue E — macOS `sudo openvpn: command not found`
 
+**Symptom:** Running `sudo openvpn ...` on macOS returns `command not found` even though OpenVPN is installed.
+
+**Root cause:** `sudo` uses a restricted PATH that excludes `/opt/homebrew/sbin`.
+
+**Resolution:** Always use the full path:
+```bash
+sudo /opt/homebrew/sbin/openvpn --config ...
+```
+
+---
+
 ### Issue F — Portal showed `unknown` device for active sessions
 
 **Symptom:** Active sessions were visible, but device/platform stayed `unknown`.
@@ -377,12 +388,16 @@ status /var/log/openvpn/status-udp.log 2
 
 Keep only one `status` directive per config.
 
-**Root cause:** `sudo` uses a restricted PATH that excludes `/opt/homebrew/sbin`.
+### Issue I — History showed a high one-minute peak that did not match real device usage
 
-**Resolution:** Always use the full path:
-```bash
-sudo /opt/homebrew/sbin/openvpn --config ...
-```
+**Symptom:** Daily history showed an unusual `Peak Active` spike, while average usage remained low.
+
+**Root cause:** OpenVPN status snapshots can briefly include unauthenticated/transient entries (for example `UNDEF`, zero traffic, connection-reset loops from a single endpoint), which inflate raw peak counts.
+
+**Resolution:**
+- Use portal `Trusted Sessions` as the stable operational metric.
+- Keep `Active Sessions (Raw)` and `Suspect Sessions` visible for audit transparency.
+- During incidents, correlate suspect spikes with TCP journal warnings (`Bad encapsulated packet length`, `connection-reset`) and repeated source IP:port churn.
 
 ---
 

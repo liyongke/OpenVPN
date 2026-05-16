@@ -26,6 +26,8 @@ class HistoryStore:
                 CREATE TABLE IF NOT EXISTS snapshots (
                     sampled_at TEXT PRIMARY KEY,
                     active_clients INTEGER NOT NULL,
+                    trusted_active_clients INTEGER NOT NULL DEFAULT 0,
+                    suspect_active_clients INTEGER NOT NULL DEFAULT 0,
                     total_bytes_received INTEGER NOT NULL,
                     total_bytes_sent INTEGER NOT NULL,
                     payload_json TEXT NOT NULL
@@ -33,6 +35,17 @@ class HistoryStore:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_sampled_at ON snapshots(sampled_at)")
+            existing_columns = {
+                str(row["name"]) for row in conn.execute("PRAGMA table_info(snapshots)").fetchall()
+            }
+            if "trusted_active_clients" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE snapshots ADD COLUMN trusted_active_clients INTEGER NOT NULL DEFAULT 0"
+                )
+            if "suspect_active_clients" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE snapshots ADD COLUMN suspect_active_clients INTEGER NOT NULL DEFAULT 0"
+                )
 
     def insert_snapshot(self, payload: dict[str, Any], sampled_at: datetime) -> None:
         summary = payload.get("summary", {})
@@ -42,14 +55,18 @@ class HistoryStore:
                 INSERT OR REPLACE INTO snapshots (
                     sampled_at,
                     active_clients,
+                    trusted_active_clients,
+                    suspect_active_clients,
                     total_bytes_received,
                     total_bytes_sent,
                     payload_json
-                ) VALUES (?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     sampled_at.astimezone(timezone.utc).isoformat(),
                     int(summary.get("active_clients", 0)),
+                    int(summary.get("trusted_active_clients", summary.get("active_clients", 0))),
+                    int(summary.get("suspect_active_clients", 0)),
                     int(summary.get("total_bytes_received", 0)),
                     int(summary.get("total_bytes_sent", 0)),
                     json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
@@ -75,6 +92,9 @@ class HistoryStore:
                 COUNT(*) AS sample_count,
                 MAX(active_clients) AS peak_active_clients,
                 AVG(active_clients) AS avg_active_clients,
+                MAX(COALESCE(trusted_active_clients, active_clients)) AS peak_trusted_active_clients,
+                AVG(COALESCE(trusted_active_clients, active_clients)) AS avg_trusted_active_clients,
+                MAX(COALESCE(suspect_active_clients, 0)) AS peak_suspect_active_clients,
                 MAX(total_bytes_received) AS max_total_bytes_received,
                 MAX(total_bytes_sent) AS max_total_bytes_sent,
                 MAX(sampled_at) AS last_sampled_at
@@ -97,6 +117,9 @@ class HistoryStore:
                     "sample_count": int(row["sample_count"] or 0),
                     "peak_active_clients": int(row["peak_active_clients"] or 0),
                     "avg_active_clients": round(float(row["avg_active_clients"] or 0.0), 2),
+                    "peak_trusted_active_clients": int(row["peak_trusted_active_clients"] or 0),
+                    "avg_trusted_active_clients": round(float(row["avg_trusted_active_clients"] or 0.0), 2),
+                    "peak_suspect_active_clients": int(row["peak_suspect_active_clients"] or 0),
                     "max_total_bytes_received": max_rx,
                     "max_total_bytes_sent": max_tx,
                     "max_total_mib_received": round(max_rx / 1024 / 1024, 2),
