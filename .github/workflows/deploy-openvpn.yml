@@ -235,6 +235,25 @@ jobs:
           tar -xzf /tmp/vpn-portal-phase1.tar.gz -C "$APP_DIR"
           chmod +x "$APP_DIR/run_portal.sh"
 
+          # Service mode disables dependency installation at runtime.
+          # Ensure the shared venv exists and has portal deps before restart.
+          VENV_DIR="/home/ec2-user/apps/.python-venv"
+          if [[ ! -x "$VENV_DIR/bin/python3" && ! -x "$VENV_DIR/bin/python" ]]; then
+            runuser -u ec2-user -- python3 -m venv "$VENV_DIR"
+          fi
+
+          VENV_PY="$VENV_DIR/bin/python3"
+          if [[ ! -x "$VENV_PY" ]]; then
+            VENV_PY="$VENV_DIR/bin/python"
+          fi
+
+          if ! runuser -u ec2-user -- "$VENV_PY" -c 'import uvicorn' >/dev/null 2>&1; then
+            runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
+            runuser -u ec2-user -- "$VENV_PY" -m pip install -r "$APP_DIR/requirements.txt" >/dev/null
+          fi
+
+          chown -R ec2-user:ec2-user "$VENV_DIR" || true
+
           if [[ -f "$ENV_BACKUP" && ! -f "$APP_DIR/.env" ]]; then
             cp "$ENV_BACKUP" "$APP_DIR/.env"
             chown ec2-user:ec2-user "$APP_DIR/.env" || true

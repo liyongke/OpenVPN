@@ -17,6 +17,8 @@ sequenceDiagram
     STS-->>GH: Temporary credentials
     GH->>S3: Upload artifact tar.gz
     GH->>SSM: send-command (deploy script)
+    GH->>SSM: Wait for command-executed
+    GH->>SSM: On waiter failure, fetch invocation output
     SSM->>EC2: Execute deployment commands
     EC2->>S3: Download artifact
     EC2->>Portal: Restart service (systemd)

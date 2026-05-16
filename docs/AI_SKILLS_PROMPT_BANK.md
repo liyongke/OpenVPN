@@ -292,8 +292,10 @@ Return only:
 2) Minimal read-only checks and expected pass/fail output for each stage:
    - OIDC role assumption
    - S3 artifact upload/read
+   - Deploy artifact metadata resolution (`artifact_s3_uri` non-empty in deploy job)
    - EC2 instance resolution
    - SSM send-command and command invocation status
+   - Waiter failure diagnostics using `aws ssm get-command-invocation`
    - Post-deploy health checks (portal + OpenVPN status/device-hints guardrails)
 3) Lowest-risk correction sequence with rollback per step.
 Avoid suggesting static AWS key usage.

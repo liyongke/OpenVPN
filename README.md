@@ -113,6 +113,8 @@ sequenceDiagram
   STS-->>GH: Temporary credentials
   GH->>S3: Upload artifact tar.gz
   GH->>SSM: send-command (deploy script)
+  GH->>SSM: Wait for command-executed
+  GH->>SSM: On waiter failure, fetch invocation output
   SSM->>EC2: Execute deployment commands
   EC2->>S3: Download artifact
   EC2->>Portal: Restart service (systemd)
@@ -179,6 +181,8 @@ What it does:
 Deploy safety behavior:
 - The deploy job resolves `artifact_s3_uri` again in-job from `ARTIFACT_S3_URI` secret (or dispatch override) before SSM execution.
 - The workflow fails fast if the resolved `ARTIFACT_S3_URI` is empty, preventing partial/no-op deploy attempts on EC2.
+- The workflow forces JavaScript actions to Node 24 (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`) to avoid Node 20 deprecation warnings.
+- If `aws ssm wait command-executed` fails, the workflow immediately fetches and prints `get-command-invocation` output before exiting.
 
 Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).

@@ -155,6 +155,8 @@ Pipeline behavior:
 2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, deploy through SSM.
 3. Workflow dispatch: optional manual deploy with `instance_id` and `artifact_s3_uri` overrides.
 4. Deploy job resolves `artifact_s3_uri` in-job from secret/input and fails fast if empty before sending SSM command.
+5. Workflow sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to avoid Node 20 action-runtime deprecation warnings.
+6. If SSM waiter fails, deploy step fetches `get-command-invocation` output immediately for root-cause visibility.
 
 Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
@@ -171,6 +173,7 @@ gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
 
 Post-deploy checks executed by workflow:
 - `vpn-portal-phase1` systemd service is restarted and verified as active.
+- Shared portal venv (`/home/ec2-user/apps/.python-venv`) is preflighted so service mode can run with `RUN_PORTAL_MANAGE_DEPS=0`.
 - Portal health endpoint responds on `http://127.0.0.1:8088/healthz` (with bounded retry window after restart).
 - Exactly one `status` directive exists in each OpenVPN server config.
 - Status file mapping remains `status-tcp.log` for TCP and `status-udp.log` for UDP.
