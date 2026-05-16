@@ -402,9 +402,13 @@ jobs:
           echo "ROLLBACK_ARCHIVE=${ROLLBACK_ARCHIVE}"
           EOF
 
-          REMOTE_B64="$(printf '%s' "$REMOTE_SCRIPT" | base64 | tr -d '\n')"
+          # Upload deploy script to S3 so SSM does not hit the 4000-char command limit.
+          SCRIPT_S3_KEY="${ARTIFACT_S3_URI%/*}/deploy-script-${GITHUB_SHA}.sh"
+          printf '%s' "$REMOTE_SCRIPT" > /tmp/deploy_script.sh
+          aws s3 cp /tmp/deploy_script.sh "$SCRIPT_S3_KEY"
+
           PARAMETERS_JSON="$(cat <<JSON
-          {"commands":["APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' bash -lc \"echo '${REMOTE_B64}' | base64 -d >/tmp/deploy_openvpn_portal.sh && bash /tmp/deploy_openvpn_portal.sh\""]}
+          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' bash /tmp/deploy_openvpn_portal.sh"]}
           JSON
           )"
 
