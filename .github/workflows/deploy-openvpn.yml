@@ -292,6 +292,7 @@ jobs:
             fi
 
             if command -v yum >/dev/null 2>&1; then
+              yum remove -y openssl-devel || true
               yum install -y gcc make bzip2-devel libffi-devel zlib-devel xz-devel sqlite-devel readline-devel wget tar openssl11 openssl11-devel
               OPENSSL_INCLUDE="/usr/include/openssl11"
               OPENSSL_LIB="/usr/lib64"
