@@ -269,44 +269,44 @@ jobs:
           tar -xzf /tmp/vpn-portal-phase1.tar.gz -C "$APP_DIR"
           chmod +x "$APP_DIR/run_portal.sh"
 
+          # One canonical Python 3.13: the prebuilt binary at a fixed path.
+          # Remove any source-compiled python3.13 that may exist elsewhere on the system.
+          PYTHON_ROOT="/opt/python-3.13"
+          PYTHON_BIN_DIR="$PYTHON_ROOT/python/bin"
+          PREBUILT_PY="$PYTHON_BIN_DIR/python3.13"
+
           install_python313() {
-            if command -v python3.13 >/dev/null 2>&1; then
-              python3.13 -c 'import ssl; import sqlite3' >/dev/null 2>&1 && return 0
+            # Skip download only if the prebuilt binary is already healthy at our fixed path.
+            if [[ -x "$PREBUILT_PY" ]] && "$PREBUILT_PY" -c 'import ssl; import sqlite3' >/dev/null 2>&1; then
+              echo "INFO: Prebuilt python3.13 already present and healthy — skipping download."
+            else
+              PYTHON_TARBALL="/tmp/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
+              PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
+              rm -rf "$PYTHON_ROOT"
+              mkdir -p "$PYTHON_ROOT"
+              curl -fsSL -o "$PYTHON_TARBALL" "$PYTHON_URL"
+              tar -xzf "$PYTHON_TARBALL" -C "$PYTHON_ROOT"
             fi
 
-            PYTHON_ROOT="/opt/python-3.13"
-            PYTHON_TARBALL="/tmp/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
-            PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
-
-            rm -rf "$PYTHON_ROOT"
-            mkdir -p "$PYTHON_ROOT"
-            curl -fsSL -o "$PYTHON_TARBALL" "$PYTHON_URL"
-            tar -xzf "$PYTHON_TARBALL" -C "$PYTHON_ROOT"
-            # python-build-standalone install_only tarballs extract into a python/ subdirectory
-            PYTHON_BIN_DIR="$PYTHON_ROOT/python/bin"
-
+            # Always remove any system/source-compiled python3.13 and re-point symlinks
+            # to our prebuilt binary so there is exactly one python3.13 on the system.
+            rm -f /usr/local/bin/python3.13 /usr/local/bin/pip3.13
             ln -sf "$PYTHON_BIN_DIR/python3.13" /usr/local/bin/python3.13
-            ln -sf "$PYTHON_BIN_DIR/pip3.13" /usr/local/bin/pip3.13
+            ln -sf "$PYTHON_BIN_DIR/pip3.13"    /usr/local/bin/pip3.13
 
-            if ! command -v python3.13 >/dev/null 2>&1; then
-              echo "ERROR: python3.13 install completed but binary is missing" >&2
-              exit 1
-            fi
-
-            if ! python3.13 -c 'import ssl; import sys; print(sys.version)' >/dev/null 2>&1; then
-              echo "ERROR: python3.13 is installed but ssl module is unavailable" >&2
+            if ! "$PREBUILT_PY" -c 'import ssl; import sqlite3; import sys; print(sys.version)' >/dev/null 2>&1; then
+              echo "ERROR: prebuilt python3.13 missing ssl or sqlite3 — cannot continue" >&2
               exit 1
             fi
           }
 
           install_python313
 
-          # Service mode disables dependency installation at runtime.
-          # Ensure the shared venv exists and has portal deps before restart.
+          # Always use the absolute prebuilt path — never rely on PATH resolution.
           VENV_DIR="/home/ec2-user/apps/.python-venv"
-          PY313_BIN="$(command -v python3.13)"
-          if [[ -z "$PY313_BIN" || ! -x "$PY313_BIN" ]]; then
-            echo "ERROR: python3.13 is not available after install_python313" >&2
+          PY313_BIN="$PREBUILT_PY"
+          if [[ ! -x "$PY313_BIN" ]]; then
+            echo "ERROR: prebuilt python3.13 not found at $PY313_BIN" >&2
             exit 1
           fi
 
