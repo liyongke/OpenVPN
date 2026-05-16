@@ -22,6 +22,7 @@ sequenceDiagram
     SSM->>EC2: Execute deployment commands
     EC2->>S3: Download artifact
     EC2->>Portal: Restart vpn-portal-tcp + vpn-portal-udp (systemd)
+    EC2->>EC2: Re-apply cross-tunnel iptables isolation rules
     EC2->>EC2: Verify OpenVPN guardrails
     EC2-->>SSM: Command output + status
     SSM-->>GH: Invocation result

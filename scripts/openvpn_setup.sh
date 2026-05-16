@@ -279,6 +279,14 @@ sudo iptables -t mangle -C FORWARD -o tun+ -p tcp --tcp-flags SYN,RST SYN -j TCP
 sudo iptables -t mangle -C FORWARD -i tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \
   sudo iptables -t mangle -A FORWARD -i tun+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
+# Portal cross-tunnel isolation: TCP VPN clients must not reach UDP portal, and vice versa.
+# Bind IP alone is insufficient — both addresses are local on the same host so the kernel
+# delivers cross-tunnel packets via INPUT, bypassing the bind restriction.
+sudo iptables -C INPUT -s 10.9.0.0/24 -d 10.8.0.1 -p tcp --dport 8088 -j DROP 2>/dev/null || \
+  sudo iptables -I INPUT -s 10.9.0.0/24 -d 10.8.0.1 -p tcp --dport 8088 -j DROP
+sudo iptables -C INPUT -s 10.8.0.0/24 -d 10.9.0.1 -p tcp --dport 8088 -j DROP 2>/dev/null || \
+  sudo iptables -I INPUT -s 10.8.0.0/24 -d 10.9.0.1 -p tcp --dport 8088 -j DROP
+
 sudo systemctl disable --now openvpn-server@server 2>/dev/null || true
 sudo systemctl disable --now openvpn@server 2>/dev/null || true
 sudo systemctl enable openvpn@server-udp

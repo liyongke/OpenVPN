@@ -548,6 +548,12 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 - Prefer AWS Systems Manager Session Manager over SSH for administration.
 - Prefer VPN-only portal exposure on tunnel URLs (`10.9.0.1:8088` / `10.8.0.1:8088`) and keep `enable_portal_ingress=false` unless public admin access is explicitly required.
 - Keep `vpn-portal-tcp` and `vpn-portal-udp` using `ExecStart=.../run_portal.sh` bound to their respective tunnel IPs; do not bind to `0.0.0.0` or `127.0.0.1`.
+- **Bind IP alone does not enforce cross-tunnel portal isolation.** Both tunnel IPs are local addresses on the same host — the kernel delivers cross-tunnel packets via the INPUT chain regardless of bind address. Isolation is enforced by iptables INPUT DROP rules applied by both `openvpn_setup.sh` and every CI/CD deploy:
+  ```
+  iptables -I INPUT -s 10.9.0.0/24 -d 10.8.0.1 -p tcp --dport 8088 -j DROP  # TCP clients → UDP portal
+  iptables -I INPUT -s 10.8.0.0/24 -d 10.9.0.1 -p tcp --dport 8088 -j DROP  # UDP clients → TCP portal
+  ```
+  These rules are re-applied on every deploy since iptables rules do not survive EC2 reboots.
 - For systemd service starts, disable startup dependency installs (`RUN_PORTAL_MANAGE_DEPS=0`) to prevent venv permission failures.
 - Keep admin portal ingress restricted to explicit `/32` IP allowlists.
 
@@ -711,9 +717,10 @@ The deploy pipeline always writes `.env.tcp` and `.env.udp` fresh on every deplo
 | `/home/ec2-user/apps/.python-venv` | CI/CD | Yes (recreated only if Python version changes) |
 
 ### Portal services
-- `vpn-portal-tcp` — binds to `10.9.0.1:8088`, accessible only to TCP VPN clients (`10.9.0.0/24`)
-- `vpn-portal-udp` — binds to `10.8.0.1:8088`, accessible only to UDP VPN clients (`10.8.0.0/24`)
-- Both services show **all VPN sessions** (TCP + UDP) and share the same history DB.
+- `vpn-portal-tcp` — binds to `10.9.0.1:8088`; access restricted to TCP VPN clients (`10.9.0.0/24`) via iptables INPUT DROP
+- `vpn-portal-udp` — binds to `10.8.0.1:8088`; access restricted to UDP VPN clients (`10.8.0.0/24`) via iptables INPUT DROP
+- Both services show **all VPN sessions** (TCP + UDP) and share the same history DB (WAL mode enabled for safe concurrent access).
+- Isolation requires **both** bind IP and iptables rules — bind IP alone is insufficient (see §11 Security Notes).
 
 ### Fast Recovery
 If either portal service is not running:
