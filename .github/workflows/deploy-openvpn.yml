@@ -368,6 +368,8 @@ jobs:
           systemctl enable vpn-portal-phase1 >/dev/null
           systemctl restart vpn-portal-phase1
 
+          sleep 5
+
           echo "== OPENVPN STATUS DIRECTIVES =="
           grep -nE '^status ' /etc/openvpn/server-tcp.conf
           grep -nE '^status ' /etc/openvpn/server-udp.conf
@@ -389,7 +391,7 @@ jobs:
 
           # The service can take a few seconds after restart before binding.
           HEALTH_OK=0
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 90); do
             if curl -fsS --max-time 5 http://127.0.0.1:8088/healthz >/dev/null; then
               HEALTH_OK=1
               break
