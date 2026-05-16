@@ -186,6 +186,7 @@ Deploy safety behavior:
 
 Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
+- Repository secret `AWS_ROLE_TO_ASSUME_DEV` (OIDC IAM role ARN for non-main test branches).
 - Repository secret `ARTIFACT_S3_URI` (S3 prefix, for example `s3://<bucket>/<prefix>`).
 - Repository variable `AWS_REGION` (optional, defaults to `ap-southeast-1`).
 
@@ -193,7 +194,9 @@ Terraform can create the OIDC deploy role for this workflow. After apply, set th
 
 ```bash
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
 ```
 
 Manual dispatch inputs:

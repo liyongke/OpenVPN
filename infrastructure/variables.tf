@@ -76,6 +76,12 @@ variable "github_actions_oidc_role_name" {
   default     = "GitHubActionsOpenVPNDeployRole"
 }
 
+variable "github_actions_oidc_dev_role_name" {
+  description = "IAM role name assumed by GitHub Actions via OIDC for non-main test branches"
+  type        = string
+  default     = "GitHubActionsOpenVPNDevRole"
+}
+
 variable "github_repository_owner" {
   description = "GitHub repository owner allowed to assume the OIDC role"
   type        = string
@@ -92,4 +98,10 @@ variable "github_oidc_branch" {
   description = "Git branch allowed to assume the OIDC role"
   type        = string
   default     = "main"
+}
+
+variable "github_oidc_dev_branch_pattern" {
+  description = "Git branch wildcard pattern allowed to assume the dev OIDC role"
+  type        = string
+  default     = "dev/*"
 }

@@ -160,6 +160,7 @@ Pipeline behavior:
 
 Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
+- Secret: `AWS_ROLE_TO_ASSUME_DEV` (IAM role for GitHub OIDC on non-main test branches).
 - Secret: `ARTIFACT_S3_URI` (artifact prefix `s3://<bucket>/<path>`).
 - Variable: `AWS_REGION` (optional; default `ap-southeast-1`).
 
@@ -168,7 +169,9 @@ OIDC role bootstrap via Terraform:
 ```bash
 terraform -chdir=infrastructure apply
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
 ```
 
 Post-deploy checks executed by workflow:
