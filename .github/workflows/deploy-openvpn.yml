@@ -314,16 +314,30 @@ jobs:
           # Ensure the shared venv exists and has portal deps before restart.
           VENV_DIR="/home/ec2-user/apps/.python-venv"
           PY313_BIN="$(command -v python3.13)"
-          if [[ ! -x "$VENV_DIR/bin/python3.13" && ! -x "$VENV_DIR/bin/python3" && ! -x "$VENV_DIR/bin/python" ]]; then
+          if [[ -z "$PY313_BIN" || ! -x "$PY313_BIN" ]]; then
+            echo "ERROR: python3.13 is not available after install_python313" >&2
+            exit 1
+          fi
+
+          RECREATE_VENV=0
+          if [[ -x "$VENV_DIR/bin/python" ]]; then
+            CURRENT_VENV_MM="$(runuser -u ec2-user -- "$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")"
+            if [[ "$CURRENT_VENV_MM" != "3.13" ]]; then
+              RECREATE_VENV=1
+            fi
+          else
+            RECREATE_VENV=1
+          fi
+
+          if [[ "$RECREATE_VENV" == "1" ]]; then
+            rm -rf "$VENV_DIR"
             runuser -u ec2-user -- "$PY313_BIN" -m venv "$VENV_DIR"
           fi
 
           VENV_PY="$VENV_DIR/bin/python3.13"
           if [[ ! -x "$VENV_PY" ]]; then
-            VENV_PY="$VENV_DIR/bin/python3"
-          fi
-          if [[ ! -x "$VENV_PY" ]]; then
-            VENV_PY="$VENV_DIR/bin/python"
+            echo "ERROR: expected Python 3.13 virtualenv at $VENV_PY" >&2
+            exit 1
           fi
 
           runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
