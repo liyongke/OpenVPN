@@ -39,7 +39,7 @@ flowchart TB
     CP["Client Profiles\nclients/*.ovpn"]
     EC2["OpenVPN EC2 Server\nTCP 443 default, UDP 443 optional"]
     TEL["Telemetry + Metadata\nstatus-tcp/udp + device_hints"]
-    PORTAL["Portal Service\nopenvpn_portal + vpn-portal-phase1"]
+    PORTAL["Portal Service\nopenvpn_portal + vpn-portal-tcp/udp"]
 
     TF["Terraform\ninfrastructure/\nS3 remote backend"]
     OPS["Ops Scripts\nscripts/\nsetup/reconcile/rotate/hooks"]
@@ -65,7 +65,7 @@ flowchart TB
     W5["5. connect client + verify route"]
     W6["6. observe in portal"]
     W7["7. operate securely\n(reconcile/rotate)"]
-    W8["8. recover + persist .env"]
+    W8["8. deploy manages env; protect data/"]
     W9["9. update docs + prompt templates"]
 
     W1 --> W2 --> W3 --> W4 --> W5 --> W6 --> W7 --> W8 --> W9
@@ -186,6 +186,7 @@ Deploy safety behavior:
 
 Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
+- Repository secret `AWS_ROLE_TO_ASSUME_DEV` (OIDC IAM role ARN for non-main test branches).
 - Repository secret `ARTIFACT_S3_URI` (S3 prefix, for example `s3://<bucket>/<prefix>`).
 - Repository variable `AWS_REGION` (optional, defaults to `ap-southeast-1`).
 
@@ -193,7 +194,9 @@ Terraform can create the OIDC deploy role for this workflow. After apply, set th
 
 ```bash
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
 ```
 
 Manual dispatch inputs:

@@ -62,15 +62,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install portal dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r openvpn_portal/requirements.txt
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r openvpn_portal/requirements.txt
 
       - name: Python syntax check
-        run: python -m compileall -q openvpn_portal
+        run: python3 -m compileall -q openvpn_portal
 
       - name: Shell syntax check
         shell: bash
@@ -96,9 +96,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     if: github.event_name != 'pull_request'
+    env:
+      ROLE_TO_ASSUME: ${{ github.ref_name == 'main' && secrets.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify OIDC role secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ROLE_TO_ASSUME}" ]]; then
+            echo "ERROR: Missing OIDC role secret. Set AWS_ROLE_TO_ASSUME for main or AWS_ROLE_TO_ASSUME_DEV for non-main branches." >&2
+            exit 1
+          fi
 
       - name: Resolve artifact metadata
         id: meta
@@ -134,7 +145,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Upload artifact to S3
@@ -149,10 +160,33 @@ jobs:
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
     steps:
+      - name: Resolve OIDC role for branch
+        id: oidc_role
+        shell: bash
+        env:
+          ROLE_MAIN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          ROLE_DEV: ${{ secrets.AWS_ROLE_TO_ASSUME_DEV }}
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH" == "main" ]]; then
+            ROLE="${ROLE_MAIN}"
+            ROLE_LABEL="prod (main)"
+          else
+            ROLE="${ROLE_DEV}"
+            ROLE_LABEL="dev ($BRANCH)"
+          fi
+          if [[ -z "$ROLE" ]]; then
+            echo "ERROR: Missing OIDC role secret for $ROLE_LABEL. Set AWS_ROLE_TO_ASSUME (main) or AWS_ROLE_TO_ASSUME_DEV (dev/*)." >&2
+            exit 1
+          fi
+          echo "role=$ROLE" >> "$GITHUB_OUTPUT"
+          echo "Resolved OIDC role for $ROLE_LABEL"
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ steps.oidc_role.outputs.role }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Resolve deployment target
@@ -214,55 +248,106 @@ jobs:
 
           APP_DIR="${APP_DIR}"
           ARTIFACT_URI="${ARTIFACT_S3_URI}"
-          UNIT_PATH="/etc/systemd/system/vpn-portal-phase1.service"
+          UNIT_PATH_TCP="/etc/systemd/system/vpn-portal-tcp.service"
+          UNIT_PATH_UDP="/etc/systemd/system/vpn-portal-udp.service"
           TS="$(date +%Y%m%d%H%M%S)"
           ROLLBACK_ARCHIVE="/home/ec2-user/apps/releases/vpn-portal-phase1-${TS}.tar.gz"
-          ENV_BACKUP="/tmp/vpn-portal-phase1-${TS}.env"
 
           mkdir -p /home/ec2-user/apps/releases
           mkdir -p "$APP_DIR"
-
-          if [[ -f "$APP_DIR/.env" ]]; then
-            cp "$APP_DIR/.env" "$ENV_BACKUP"
-          fi
 
           if [[ "$(ls -A "$APP_DIR" 2>/dev/null || true)" != "" ]]; then
             tar -czf "$ROLLBACK_ARCHIVE" -C "$APP_DIR" .
           fi
 
           aws s3 cp "$ARTIFACT_URI" /tmp/vpn-portal-phase1.tar.gz
-          find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +
+          find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name '.env.tcp' ! -name '.env.udp' ! -name 'data' -exec rm -rf {} +
           tar -xzf /tmp/vpn-portal-phase1.tar.gz -C "$APP_DIR"
           chmod +x "$APP_DIR/run_portal.sh"
+          mkdir -p "$APP_DIR/data"
+          chown -R ec2-user:ec2-user "$APP_DIR"
 
-          # Service mode disables dependency installation at runtime.
-          # Ensure the shared venv exists and has portal deps before restart.
+          # One canonical Python 3.13: the prebuilt binary at a fixed path.
+          # Remove any source-compiled python3.13 that may exist elsewhere on the system.
+          PYTHON_ROOT="/opt/python-3.13"
+          PYTHON_BIN_DIR="$PYTHON_ROOT/python/bin"
+          PREBUILT_PY="$PYTHON_BIN_DIR/python3.13"
+
+          install_python313() {
+            # Skip download only if the prebuilt binary is already healthy at our fixed path.
+            if [[ -x "$PREBUILT_PY" ]] && "$PREBUILT_PY" -c 'import ssl; import sqlite3' >/dev/null 2>&1; then
+              echo "INFO: Prebuilt python3.13 already present and healthy — skipping download."
+            else
+              PYTHON_TARBALL="/tmp/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
+              PYTHON_URL="https://github.com/astral-sh/python-build-standalone/releases/download/20260510/cpython-3.13.13+20260510-x86_64-unknown-linux-gnu-install_only.tar.gz"
+              rm -rf "$PYTHON_ROOT"
+              mkdir -p "$PYTHON_ROOT"
+              curl -fsSL -o "$PYTHON_TARBALL" "$PYTHON_URL"
+              tar -xzf "$PYTHON_TARBALL" -C "$PYTHON_ROOT"
+            fi
+
+            # Always remove any system/source-compiled python3.13 and re-point symlinks
+            # to our prebuilt binary so there is exactly one python3.13 on the system.
+            rm -f /usr/local/bin/python3.13 /usr/local/bin/pip3.13
+            ln -sf "$PYTHON_BIN_DIR/python3.13" /usr/local/bin/python3.13
+            ln -sf "$PYTHON_BIN_DIR/pip3.13"    /usr/local/bin/pip3.13
+
+            if ! "$PREBUILT_PY" -c 'import ssl; import sqlite3; import sys; print(sys.version)' >/dev/null 2>&1; then
+              echo "ERROR: prebuilt python3.13 missing ssl or sqlite3 — cannot continue" >&2
+              exit 1
+            fi
+          }
+
+          install_python313
+
+          # Always use the absolute prebuilt path — never rely on PATH resolution.
           VENV_DIR="/home/ec2-user/apps/.python-venv"
-          if [[ ! -x "$VENV_DIR/bin/python3" && ! -x "$VENV_DIR/bin/python" ]]; then
-            runuser -u ec2-user -- python3 -m venv "$VENV_DIR"
+          PY313_BIN="$PREBUILT_PY"
+          if [[ ! -x "$PY313_BIN" ]]; then
+            echo "ERROR: prebuilt python3.13 not found at $PY313_BIN" >&2
+            exit 1
           fi
 
-          VENV_PY="$VENV_DIR/bin/python3"
+          RECREATE_VENV=0
+          if [[ -x "$VENV_DIR/bin/python" ]]; then
+            CURRENT_VENV_MM="$(runuser -u ec2-user -- "$VENV_DIR/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")"
+            if [[ "$CURRENT_VENV_MM" != "3.13" ]]; then
+              RECREATE_VENV=1
+            elif ! runuser -u ec2-user -- "$VENV_DIR/bin/python" -c 'import sqlite3' >/dev/null 2>&1; then
+              echo "INFO: Existing venv missing sqlite3 — recreating from prebuilt Python."
+              RECREATE_VENV=1
+            fi
+          else
+            RECREATE_VENV=1
+          fi
+
+          if [[ "$RECREATE_VENV" == "1" ]]; then
+            rm -rf "$VENV_DIR"
+            runuser -u ec2-user -- "$PY313_BIN" -m venv "$VENV_DIR"
+          fi
+
+          VENV_PY="$VENV_DIR/bin/python3.13"
           if [[ ! -x "$VENV_PY" ]]; then
-            VENV_PY="$VENV_DIR/bin/python"
+            echo "ERROR: expected Python 3.13 virtualenv at $VENV_PY" >&2
+            exit 1
           fi
 
-          if ! runuser -u ec2-user -- "$VENV_PY" -c 'import uvicorn' >/dev/null 2>&1; then
-            runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
-            runuser -u ec2-user -- "$VENV_PY" -m pip install -r "$APP_DIR/requirements.txt" >/dev/null
-          fi
+          runuser -u ec2-user -- "$VENV_PY" -m pip install --upgrade pip >/dev/null
+          runuser -u ec2-user -- "$VENV_PY" -m pip install -r "$APP_DIR/requirements.txt" >/dev/null
 
           chown -R ec2-user:ec2-user "$VENV_DIR" || true
 
-          if [[ -f "$ENV_BACKUP" && ! -f "$APP_DIR/.env" ]]; then
-            cp "$ENV_BACKUP" "$APP_DIR/.env"
-            chown ec2-user:ec2-user "$APP_DIR/.env" || true
-            chmod 600 "$APP_DIR/.env" || true
-          fi
+          # Always write env files so deploy-managed settings are never stale
+          printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.tcp"
+          chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
+          chmod 600 "$APP_DIR/.env.tcp"
+          printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.udp"
+          chown ec2-user:ec2-user "$APP_DIR/.env.udp"
+          chmod 600 "$APP_DIR/.env.udp"
 
-          cat > "$UNIT_PATH" <<UNIT
+          cat > "$UNIT_PATH_TCP" <<UNIT
           [Unit]
-          Description=VPN Portal Phase1 ReadOnly
+          Description=VPN Portal - TCP
           After=network-online.target
           Wants=network-online.target
 
@@ -270,7 +355,8 @@ jobs:
           Type=simple
           User=ec2-user
           WorkingDirectory=${APP_DIR}
-          EnvironmentFile=${APP_DIR}/.env
+          Environment=PORTAL_VENV_DIR=/home/ec2-user/apps/.python-venv
+          EnvironmentFile=${APP_DIR}/.env.tcp
           Environment=RUN_PORTAL_MANAGE_DEPS=0
           ExecStart=${APP_DIR}/run_portal.sh
           Restart=always
@@ -280,12 +366,60 @@ jobs:
           WantedBy=multi-user.target
           UNIT
 
-          chown root:root "$UNIT_PATH"
-          chmod 644 "$UNIT_PATH"
+          cat > "$UNIT_PATH_UDP" <<UNIT
+          [Unit]
+          Description=VPN Portal - UDP
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=ec2-user
+          WorkingDirectory=${APP_DIR}
+          Environment=PORTAL_VENV_DIR=/home/ec2-user/apps/.python-venv
+          EnvironmentFile=${APP_DIR}/.env.udp
+          Environment=RUN_PORTAL_MANAGE_DEPS=0
+          ExecStart=${APP_DIR}/run_portal.sh
+          Restart=always
+          RestartSec=3
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          chown root:root "$UNIT_PATH_TCP" "$UNIT_PATH_UDP"
+          chmod 644 "$UNIT_PATH_TCP" "$UNIT_PATH_UDP"
+
+          # Stop and disable old combined service if still present
+          if systemctl is-enabled --quiet vpn-portal-phase1 2>/dev/null; then
+            systemctl disable vpn-portal-phase1 >/dev/null
+          fi
+          if systemctl is-active --quiet vpn-portal-phase1 2>/dev/null; then
+            systemctl stop vpn-portal-phase1
+          fi
 
           systemctl daemon-reload
-          systemctl enable vpn-portal-phase1 >/dev/null
-          systemctl restart vpn-portal-phase1
+          systemctl enable vpn-portal-tcp vpn-portal-udp >/dev/null
+          systemctl restart vpn-portal-tcp vpn-portal-udp
+
+          sleep 5
+
+          for SVC in vpn-portal-tcp vpn-portal-udp; do
+            SERVICE_OK=0
+            for _ in $(seq 1 90); do
+              if systemctl is-active --quiet "$SVC"; then
+                SERVICE_OK=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$SERVICE_OK" != "1" ]]; then
+              echo "ERROR: $SVC did not reach active state." >&2
+              systemctl status --no-pager "$SVC" || true
+              journalctl -u "$SVC" -n 100 --no-pager || true
+              exit 1
+            fi
+          done
 
           echo "== OPENVPN STATUS DIRECTIVES =="
           grep -nE '^status ' /etc/openvpn/server-tcp.conf
@@ -304,30 +438,36 @@ jobs:
           grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-tcp.conf
           grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-udp.conf
 
-          systemctl is-active vpn-portal-phase1
+          systemctl is-active vpn-portal-tcp
+          systemctl is-active vpn-portal-udp
 
-          # The service can take a few seconds after restart before binding.
-          HEALTH_OK=0
-          for _ in $(seq 1 30); do
-            if curl -fsS --max-time 5 http://127.0.0.1:8088/healthz >/dev/null; then
-              HEALTH_OK=1
-              break
+          # Health check both portal endpoints
+          for BIND_IP in 10.9.0.1 10.8.0.1; do
+            HEALTH_OK=0
+            for _ in $(seq 1 90); do
+              if curl -fsS --max-time 5 "http://${BIND_IP}:8088/healthz" >/dev/null; then
+                HEALTH_OK=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$HEALTH_OK" != "1" ]]; then
+              echo "ERROR: Portal health check failed for http://${BIND_IP}:8088/healthz" >&2
+              ss -ltnp | grep ':8088' || true
+              exit 1
             fi
-            sleep 1
           done
-
-          if [[ "$HEALTH_OK" != "1" ]]; then
-            echo "ERROR: Portal health check failed after restart wait window." >&2
-            systemctl status --no-pager vpn-portal-phase1 || true
-            exit 1
-          fi
 
           echo "ROLLBACK_ARCHIVE=${ROLLBACK_ARCHIVE}"
           EOF
 
-          REMOTE_B64="$(printf '%s' "$REMOTE_SCRIPT" | base64 | tr -d '\n')"
+          # Upload deploy script to S3 so SSM does not hit the 4000-char command limit.
+          SCRIPT_S3_KEY="${ARTIFACT_S3_URI%/*}/deploy-script-${GITHUB_SHA}.sh"
+          printf '%s' "$REMOTE_SCRIPT" > /tmp/deploy_script.sh
+          aws s3 cp /tmp/deploy_script.sh "$SCRIPT_S3_KEY"
+
           PARAMETERS_JSON="$(cat <<JSON
-          {"commands":["APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' bash -lc \"echo '${REMOTE_B64}' | base64 -d >/tmp/deploy_openvpn_portal.sh && bash /tmp/deploy_openvpn_portal.sh\""]}
+          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' bash /tmp/deploy_openvpn_portal.sh"]}
           JSON
           )"
 
@@ -341,10 +481,31 @@ jobs:
 
           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
-          if ! aws ssm wait command-executed \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID"; then
-            echo "ERROR: SSM command failed, fetching invocation output:" >&2
+          # Poll for up to 10 minutes (120 x 5s) instead of using aws ssm wait (max 2 min).
+          FINAL_STATUS=""
+          for attempt in $(seq 1 120); do
+            STATUS_JSON="$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query '{Status:Status,StatusDetails:StatusDetails}' \
+              --output json 2>/dev/null || echo '{"Status":"Unknown"}')"
+            CURRENT_STATUS="$(echo "$STATUS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Status"])')"
+            echo "[${attempt}/120] SSM status: $CURRENT_STATUS"
+            case "$CURRENT_STATUS" in
+              Success)
+                FINAL_STATUS="Success"
+                break
+                ;;
+              Failed|Cancelled|TimedOut|Undeliverable|Terminated|ExecutionTimedOut)
+                FINAL_STATUS="$CURRENT_STATUS"
+                break
+                ;;
+            esac
+            sleep 5
+          done
+
+          if [[ "$FINAL_STATUS" != "Success" ]]; then
+            echo "ERROR: SSM command ended with status '$FINAL_STATUS', fetching invocation output:" >&2
             aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" \
               --instance-id "$INSTANCE_ID" \

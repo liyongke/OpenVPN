@@ -6,7 +6,7 @@ sequenceDiagram
     participant S3 as S3 Artifact Bucket
     participant SSM as AWS SSM
     participant EC2 as OpenVPN EC2
-    participant Portal as vpn-portal-phase1
+    participant Portal as vpn-portal-tcp / vpn-portal-udp
 
     Dev->>GH: Push main / workflow_dispatch
     GH->>GH: Validate Python, shell, Terraform
@@ -21,7 +21,7 @@ sequenceDiagram
     GH->>SSM: On waiter failure, fetch invocation output
     SSM->>EC2: Execute deployment commands
     EC2->>S3: Download artifact
-    EC2->>Portal: Restart service (systemd)
+    EC2->>Portal: Restart vpn-portal-tcp + vpn-portal-udp (systemd)
     EC2->>EC2: Verify OpenVPN guardrails
     EC2-->>SSM: Command output + status
     SSM-->>GH: Invocation result

@@ -160,6 +160,7 @@ Pipeline behavior:
 
 Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
+- Secret: `AWS_ROLE_TO_ASSUME_DEV` (IAM role for GitHub OIDC on non-main test branches).
 - Secret: `ARTIFACT_S3_URI` (artifact prefix `s3://<bucket>/<path>`).
 - Variable: `AWS_REGION` (optional; default `ap-southeast-1`).
 
@@ -168,13 +169,15 @@ OIDC role bootstrap via Terraform:
 ```bash
 terraform -chdir=infrastructure apply
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
+DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
+gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
 ```
 
 Post-deploy checks executed by workflow:
-- `vpn-portal-phase1` systemd service is restarted and verified as active.
+- `vpn-portal-tcp` and `vpn-portal-udp` systemd services are restarted and verified as active.
 - Shared portal venv (`/home/ec2-user/apps/.python-venv`) is preflighted so service mode can run with `RUN_PORTAL_MANAGE_DEPS=0`.
-- Portal health endpoint responds on `http://127.0.0.1:8088/healthz` (with bounded retry window after restart).
+- Portal health endpoints respond on `http://10.9.0.1:8088/healthz` and `http://10.8.0.1:8088/healthz` (with bounded retry window after restart).
 - Exactly one `status` directive exists in each OpenVPN server config.
 - Status file mapping remains `status-tcp.log` for TCP and `status-udp.log` for UDP.
 - Device-hints `client-connect` hook remains enabled in both OpenVPN configs.
@@ -544,7 +547,7 @@ nslookup youtube.com      # expect non-192.168.x.x resolver
 - **Rotate server credentials** if compromise is suspected: regenerate server cert/key and `ta.key`, then redistribute fresh profiles.
 - Prefer AWS Systems Manager Session Manager over SSH for administration.
 - Prefer VPN-only portal exposure on tunnel URLs (`10.9.0.1:8088` / `10.8.0.1:8088`) and keep `enable_portal_ingress=false` unless public admin access is explicitly required.
-- Keep `vpn-portal-phase1` using `ExecStart=.../run_portal.sh` (or `--host 0.0.0.0`) and avoid hardcoded `--host 127.0.0.1` in systemd units.
+- Keep `vpn-portal-tcp` and `vpn-portal-udp` using `ExecStart=.../run_portal.sh` bound to their respective tunnel IPs; do not bind to `0.0.0.0` or `127.0.0.1`.
 - For systemd service starts, disable startup dependency installs (`RUN_PORTAL_MANAGE_DEPS=0`) to prevent venv permission failures.
 - Keep admin portal ingress restricted to explicit `/32` IP allowlists.
 
@@ -694,33 +697,35 @@ Location and usage:
 
 ---
 
-## 15. Portal .env File Persistence and Recovery
+## 15. Portal Config and Data Persistence
 
-### Why persist the .env file?
-- The portal's `.env` file is not tracked in git and will be lost if the EC2 instance is replaced, redeployed, or cleaned.
-- Without this file, the portal may not show all sessions or may not start correctly.
+### What the deploy manages automatically
+The deploy pipeline always writes `.env.tcp` and `.env.udp` fresh on every deploy — these are deploy-managed and do not need manual backup. The `data/` directory (history DB) is **never deleted** by the deploy.
 
-### What to persist
-- Path: `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env`
-- Example contents:
-  ```
-  PORTAL_HOST=0.0.0.0
-  PORTAL_PORT=8088
-  OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
-  ```
+### Persistent paths on EC2
+| Path | Managed by | Survives deploy |
+|---|---|---|
+| `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env.tcp` | CI/CD (always overwritten) | Yes |
+| `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env.udp` | CI/CD (always overwritten) | Yes |
+| `/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3` | Portal service | Yes — never deleted |
+| `/home/ec2-user/apps/.python-venv` | CI/CD | Yes (recreated only if Python version changes) |
 
-### How to persist
-- **Backup**: Save a copy of the `.env` file to a secure location (S3, password manager, or local machine).
-- **Restore**: After redeployment, copy the backup to the correct path before starting the portal service.
-- **Automate**: Add a step to your deployment or reconciliation script to restore the `.env` from backup if missing.
+### Portal services
+- `vpn-portal-tcp` — binds to `10.9.0.1:8088`, accessible only to TCP VPN clients (`10.9.0.0/24`)
+- `vpn-portal-udp` — binds to `10.8.0.1:8088`, accessible only to UDP VPN clients (`10.8.0.0/24`)
+- Both services show **all VPN sessions** (TCP + UDP) and share the same history DB.
 
 ### Fast Recovery
-If the portal is missing sessions or not starting:
-1. Restore the `.env` file as above.
-2. Restart the portal service:
-   ```bash
-   sudo systemctl restart vpn-portal-phase1
-   ```
-3. Refresh the portal in your browser and verify all sessions are visible.
+If either portal service is not running:
+```bash
+sudo systemctl restart vpn-portal-tcp vpn-portal-udp
+sudo systemctl status vpn-portal-tcp vpn-portal-udp
+```
+If history data is missing, check that `data/` exists with correct ownership:
+```bash
+ls -la /home/ec2-user/apps/vpn-portal-phase1-readonly/data/
+# Should be owned by ec2-user. If not:
+sudo chown -R ec2-user:ec2-user /home/ec2-user/apps/vpn-portal-phase1-readonly/data/
+```
 
 ---

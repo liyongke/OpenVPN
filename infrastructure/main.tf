@@ -226,6 +226,38 @@ resource "aws_iam_role" "github_actions_deploy_role" {
   assume_role_policy = data.aws_iam_policy_document.github_actions_oidc_assume_role.json
 }
 
+data "aws_iam_policy_document" "github_actions_oidc_dev_assume_role" {
+  statement {
+    sid     = "AllowGitHubActionsDevAssumeRole"
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [local.github_oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = [
+        "repo:${var.github_repository_owner}/${var.github_repository_name}:ref:refs/heads/${var.github_oidc_dev_branch_pattern}"
+      ]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_actions_dev_role" {
+  name               = var.github_actions_oidc_dev_role_name
+  assume_role_policy = data.aws_iam_policy_document.github_actions_oidc_dev_assume_role.json
+}
+
 data "aws_iam_policy_document" "github_actions_deploy_policy" {
   statement {
     sid    = "AllowEc2Describe"
@@ -266,6 +298,48 @@ resource "aws_iam_role_policy" "github_actions_deploy_policy" {
   name   = "OpenVPNGitHubActionsDeployPolicy"
   role   = aws_iam_role.github_actions_deploy_role.id
   policy = data.aws_iam_policy_document.github_actions_deploy_policy.json
+}
+
+data "aws_iam_policy_document" "github_actions_dev_policy" {
+  statement {
+    sid    = "AllowEc2DescribeDev"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeInstances"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowS3ArtifactAccessDev"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:AbortMultipartUpload",
+      "s3:ListBucket"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowSsmDeployOpsDev"
+    effect = "Allow"
+    actions = [
+      "ssm:SendCommand",
+      "ssm:GetCommandInvocation",
+      "ssm:ListCommandInvocations",
+      "ssm:ListCommands",
+      "ssm:DescribeInstanceInformation"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_dev_policy" {
+  name   = "OpenVPNGitHubActionsDevPolicy"
+  role   = aws_iam_role.github_actions_dev_role.id
+  policy = data.aws_iam_policy_document.github_actions_dev_policy.json
 }
 
 # VPC

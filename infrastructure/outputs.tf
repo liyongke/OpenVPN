@@ -13,6 +13,11 @@ output "github_actions_oidc_role_arn" {
   value       = aws_iam_role.github_actions_deploy_role.arn
 }
 
+output "github_actions_oidc_dev_role_arn" {
+  description = "ARN of IAM role assumed by GitHub Actions via OIDC on dev branches"
+  value       = aws_iam_role.github_actions_dev_role.arn
+}
+
 output "github_actions_oidc_provider_arn" {
   description = "ARN of GitHub Actions OIDC provider in IAM"
   value       = aws_iam_openid_connect_provider.github_actions.arn
