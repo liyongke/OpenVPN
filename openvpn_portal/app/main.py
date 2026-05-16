@@ -145,17 +145,3 @@ def dashboard(request: Request):
             "payload": payload,
         },
     )
-
-@app.middleware("http")
-async def protocol_based_routing(request: Request, call_next):
-    payload = collector.latest_payload
-    
-    sessions = payload.get("sessions", [])
-    protocol = request.headers.get("X-Client-Protocol")
-    
-    if protocol == "udp":
-        request.base_url = "http://10.8.0.1:8088"
-    elif protocol == "tcp":
-        request.base_url = "http://10.9.0.1:8088"
-    
-    return await call_next(request)
