@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { getBackendMonitoring, getControlFeatures, runControlAction } from "../api/client";
+import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip } from "react-leaflet";
+import { getBackendMonitoring, getControlFeatures, getMapSessions, runControlAction } from "../api/client";
+import "leaflet/dist/leaflet.css";
 
 const DEFAULT_FEATURES = {
   enabled: false,
@@ -19,6 +21,17 @@ const DEFAULT_MONITORING = {
   live_poll_seconds: 1,
 };
 
+const DEFAULT_MAP = {
+  generated_at: "",
+  updated_at: "",
+  session_total: 0,
+  mappable_total: 0,
+  mappable_trusted_total: 0,
+  country_breakdown: [],
+  provider_breakdown: [],
+  sessions: [],
+};
+
 export function ControlPage() {
   const [features, setFeatures] = useState(DEFAULT_FEATURES);
   const [token, setToken] = useState("");
@@ -26,6 +39,8 @@ export function ControlPage() {
   const [result, setResult] = useState("");
   const [monitoring, setMonitoring] = useState(DEFAULT_MONITORING);
   const [monitoringError, setMonitoringError] = useState("");
+  const [mapData, setMapData] = useState(DEFAULT_MAP);
+  const [mapError, setMapError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +61,84 @@ export function ControlPage() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshMap = async () => {
+      try {
+        const payload = await getMapSessions();
+        if (!mounted) {
+          return;
+        }
+        setMapData(payload);
+        setMapError("");
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setMapError(`Map data fetch failed: ${error.message}`);
+      }
+    };
+
+    refreshMap();
+    const interval = window.setInterval(refreshMap, 45000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const markerGroups = useMemo(() => {
+    const groups = new Map();
+    for (const session of mapData.sessions || []) {
+      if (!session.map_eligible) {
+        continue;
+      }
+
+      const geo = session.geo || {};
+      const lat = Number(geo.latitude);
+      const lon = Number(geo.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        continue;
+      }
+
+      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          lat,
+          lon,
+          trustedCount: 0,
+          suspectCount: 0,
+          sessions: [],
+          country: geo.country || "unknown",
+          city: geo.city || "",
+          provider: geo.isp || "",
+        });
+      }
+
+      const item = groups.get(key);
+      item.sessions.push(session);
+      if (session.audit_class === "trusted") {
+        item.trustedCount += 1;
+      } else {
+        item.suspectCount += 1;
+      }
+    }
+
+    return Array.from(groups.values()).sort((a, b) => b.sessions.length - a.sessions.length);
+  }, [mapData.sessions]);
+
+  const mapCenter = useMemo(() => {
+    if (!markerGroups.length) {
+      return [20, 0];
+    }
+    const lat = markerGroups.reduce((sum, item) => sum + item.lat, 0) / markerGroups.length;
+    const lon = markerGroups.reduce((sum, item) => sum + item.lon, 0) / markerGroups.length;
+    return [lat, lon];
+  }, [markerGroups]);
 
   useEffect(() => {
     let mounted = true;
@@ -92,21 +185,23 @@ export function ControlPage() {
 
   return (
     <section className="panel control-placeholder">
-      <p className="eyebrow">Administrative Surface</p>
-      <h2>Operations Center</h2>
-      <p className="sub">
-        Feature-flagged operations require authentication and are disabled by default.
-      </p>
-      <div className="chip-row">
-        <span className="chip">
-          Operations API <strong>{features.enabled ? "enabled" : "disabled"}</strong>
-        </span>
-        <span className="chip">
-          Auth <strong>{features.auth_required ? "required" : "optional"}</strong>
-        </span>
-        <span className="chip">
-          Backend <strong>{monitoring.backend_online ? "online" : "offline"}</strong>
-        </span>
+      <div className="control-header">
+        <div>
+          <p className="eyebrow">Administrative Surface</p>
+          <h2>Operations Center</h2>
+        </div>
+        <div className="chip-row control-header-chips" aria-label="Operations status summary">
+          <span className="chip">
+            Operations API <strong>{features.enabled ? "enabled" : "disabled"}</strong>
+          </span>
+          <span className="chip">
+            Auth <strong>{features.auth_required ? "required" : "optional"}</strong>
+          </span>
+          <span className="chip">
+            Backend <strong>{monitoring.backend_online ? "online" : "offline"}</strong>
+          </span>
+        </div>
+        <p className="sub control-sub-full">Feature-flagged operations require authentication and are disabled by default.</p>
       </div>
 
       <div className="control-grid">
@@ -179,6 +274,77 @@ export function ControlPage() {
           </div>
           {!features.enabled ? <p className="hint">Enable with PORTAL_CONTROL_ENABLED=1 on backend.</p> : null}
           {result ? <p className="control-result">{result}</p> : null}
+        </article>
+
+        <article className="control-card map-card map-card-bottom">
+          <h3>Session Geo Map</h3>
+          <div className="chip-row monitor-chip-row" aria-label="Session map summary">
+            <span className="chip">
+              Sessions <strong>{mapData.session_total || 0}</strong>
+            </span>
+            <span className="chip">
+              Mappable <strong>{mapData.mappable_total || 0}</strong>
+            </span>
+            <span className="chip">
+              Trusted mappable <strong>{mapData.mappable_trusted_total || 0}</strong>
+            </span>
+          </div>
+
+          {markerGroups.length ? (
+            <div className="map-wrap map-wrap-large">
+              <MapContainer center={mapCenter} zoom={2} minZoom={2} scrollWheelZoom className="leaflet-map leaflet-map-large">
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {markerGroups.map((marker) => {
+                  const total = marker.sessions.length;
+                  const radius = Math.min(16, 5 + total * 1.3);
+                  const hasSuspect = marker.suspectCount > 0;
+                  const color = hasSuspect ? "#ff6b8b" : "#4ad0a8";
+                  const topSession = marker.sessions[0] || {};
+                  const topUser = topSession.username || topSession.common_name || "n/a";
+                  return (
+                    <CircleMarker
+                      key={marker.key}
+                      center={[marker.lat, marker.lon]}
+                      radius={radius}
+                      pathOptions={{ color, fillColor: color, fillOpacity: 0.36, weight: 1.2 }}
+                    >
+                      <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
+                        <div className="map-tooltip">
+                          <strong>
+                            {marker.city ? `${marker.city}, ` : ""}
+                            {marker.country || "unknown"}
+                          </strong>
+                          <div>Total: {total} | Trusted: {marker.trustedCount} | Suspect: {marker.suspectCount}</div>
+                          <div>Top user: {topUser}</div>
+                          <div>{marker.provider || "Provider unknown"}</div>
+                        </div>
+                      </Tooltip>
+                      <Popup>
+                        <div className="map-popup">
+                          <strong>
+                            {marker.city ? `${marker.city}, ` : ""}
+                            {marker.country || "unknown"}
+                          </strong>
+                          <div>Total sessions: {total}</div>
+                          <div>Trusted: {marker.trustedCount}</div>
+                          <div>Suspect: {marker.suspectCount}</div>
+                          <div>{marker.provider || "Provider unknown"}</div>
+                        </div>
+                      </Popup>
+                    </CircleMarker>
+                  );
+                })}
+              </MapContainer>
+            </div>
+          ) : (
+            <p className="hint">No public endpoint locations available for map rendering yet.</p>
+          )}
+
+          {mapError ? <p className="control-result control-result-error">{mapError}</p> : null}
+          <p className="hint">Hover markers for quick geo session details. Location is IP-based and approximate.</p>
         </article>
       </div>
     </section>

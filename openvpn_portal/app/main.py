@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -11,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.config import load_settings
+from app.services.geoip import GeoIpService
 from app.services.history_store import HistoryStore
 from app.services.live_state import LiveStateCollector
 
@@ -24,11 +26,33 @@ collector = LiveStateCollector(
     history_sample_seconds=settings.history_sample_seconds,
     device_hints_file=settings.device_hints_file,
 )
+geoip_service = GeoIpService()
 
 base_dir = Path(__file__).resolve().parent
+project_root = base_dir.parent.parent
+
+
+def _resolve_frontend_assets_dir() -> Path:
+    local_default_dir = project_root / "local_run" / "openvpn_portal" / "app" / "static" / "frontend"
+    fallback_dir = base_dir / "static" / "frontend"
+    override = os.getenv("PORTAL_FRONTEND_ASSETS_DIR", "").strip()
+    if not override:
+        return local_default_dir if local_default_dir.exists() else fallback_dir
+
+    path = Path(override).expanduser()
+    if not path.is_absolute():
+        path = (project_root / path).resolve()
+    return path
+
+
+frontend_assets_dir = _resolve_frontend_assets_dir()
+static_dir = base_dir / "static"
+static_dir.mkdir(parents=True, exist_ok=True)
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
-app.mount("/static", StaticFiles(directory=str(base_dir / "static")), name="static")
-frontend_index_file = base_dir / "static" / "frontend" / "index.html"
+# Mount frontend assets first so /static/frontend can be redirected to local_run via env.
+app.mount("/static/frontend", StaticFiles(directory=str(frontend_assets_dir), check_dir=False), name="static-frontend")
+app.mount("/static", StaticFiles(directory=str(static_dir), check_dir=False), name="static")
+frontend_index_file = frontend_assets_dir / "index.html"
 
 
 class ControlActionRequest(BaseModel):
@@ -248,6 +272,46 @@ def api_summary() -> JSONResponse:
 def api_live_summary() -> JSONResponse:
     payload = collector.latest_payload
     return JSONResponse(payload)
+
+
+@app.get("/api/map/sessions")
+def api_map_sessions() -> JSONResponse:
+    payload = collector.latest_payload
+    sessions = payload.get("sessions", [])
+    enriched_sessions = geoip_service.enrich_sessions(sessions if isinstance(sessions, list) else [])
+
+    country_counts: dict[str, int] = {}
+    provider_counts: dict[str, int] = {}
+    for session in enriched_sessions:
+        geo = session.get("geo", {}) if isinstance(session.get("geo", {}), dict) else {}
+        country = str(geo.get("country", "")).strip() or "unknown"
+        provider = str(geo.get("isp", "")).strip() or "unknown"
+        country_counts[country] = country_counts.get(country, 0) + 1
+        provider_counts[provider] = provider_counts.get(provider, 0) + 1
+
+    mappable_total = sum(1 for session in enriched_sessions if bool(session.get("map_eligible")))
+    mapped_trusted = sum(
+        1
+        for session in enriched_sessions
+        if bool(session.get("map_eligible")) and str(session.get("audit_class", "")) == "trusted"
+    )
+
+    top_countries = sorted(country_counts.items(), key=lambda item: item[1], reverse=True)[:12]
+    top_providers = sorted(provider_counts.items(), key=lambda item: item[1], reverse=True)[:12]
+
+    return JSONResponse(
+        {
+            "generated_at": payload.get("generated_at", ""),
+            "updated_at": payload.get("updated_at", ""),
+            "live_poll_seconds": settings.live_poll_seconds,
+            "session_total": len(enriched_sessions),
+            "mappable_total": mappable_total,
+            "mappable_trusted_total": mapped_trusted,
+            "country_breakdown": [{"country": name, "count": count} for name, count in top_countries],
+            "provider_breakdown": [{"provider": name, "count": count} for name, count in top_providers],
+            "sessions": enriched_sessions,
+        }
+    )
 
 
 @app.get("/api/history/7d")

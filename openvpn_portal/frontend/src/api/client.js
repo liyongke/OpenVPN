@@ -52,6 +52,10 @@ export function getBackendMonitoring() {
   return fetchJson("/api/monitoring/backend");
 }
 
+export function getMapSessions() {
+  return fetchJson("/api/map/sessions");
+}
+
 export function getControlFeatures() {
   return fetchJson("/api/control/features");
 }

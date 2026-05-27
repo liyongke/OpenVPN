@@ -114,6 +114,7 @@ Environment variables:
 - PORTAL_HISTORY_SAMPLE_SECONDS default: 60
 - PORTAL_LIVE_POLL_SECONDS default: 1.0
 - PORTAL_DEVICE_HINTS_FILE default: /var/log/openvpn/device_hints.json
+- PORTAL_GEOIP_DB_PATH default: empty (when set, use local GeoLite2 DB first and fall back to ipwho.is)
 - PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
 
 ## Notes for your existing deployment
@@ -154,3 +155,28 @@ Local development:
 EC2 deployed services:
 - Deployment manages service-specific environment files (for example `.env.tcp` / `.env.udp`) and restarts portal services as part of CI/CD.
 - For service troubleshooting on EC2, use the runbook source of truth: [../docs/OPENVPN_RUNBOOK.md](../docs/OPENVPN_RUNBOOK.md).
+
+## Env-Driven Frontend Assets Switch (Local)
+
+Default behavior:
+- Local default: frontend build output goes to `local_run/openvpn_portal/app/static/frontend`.
+- Backend uses `local_run/openvpn_portal/app/static/frontend` when present, else falls back to `openvpn_portal/app/static/frontend`.
+- CI keeps the default in-repo output path (`openvpn_portal/app/static/frontend`) so packaging remains unchanged.
+
+Optional local-run behavior:
+- Set `PORTAL_FRONTEND_OUT_DIR` when building frontend to send build artifacts to a local-only folder.
+- Set `PORTAL_FRONTEND_ASSETS_DIR` when running backend so `/static/frontend/*` is served from that folder.
+
+Example (local-run only):
+
+```bash
+# Build SPA into local_run instead of app/static/frontend
+PORTAL_FRONTEND_OUT_DIR=../../local_run/openvpn_portal/app/static/frontend \
+   npm run build --prefix openvpn_portal/frontend
+
+# Run backend using local_run frontend assets + local_run history DB
+PORTAL_FRONTEND_ASSETS_DIR=local_run/openvpn_portal/app/static/frontend \
+PORTAL_HISTORY_DB=local_run/openvpn_portal/data/history.sqlite3 \
+RUN_PORTAL_MANAGE_DEPS=0 \
+./openvpn_portal/run_portal.sh
+```

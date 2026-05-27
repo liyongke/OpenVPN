@@ -1,6 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const outDir =
+  process.env.PORTAL_FRONTEND_OUT_DIR?.trim() ||
+  (process.env.CI ? "../app/static/frontend" : "../../local_run/openvpn_portal/app/static/frontend");
+
 // https://vite.dev/config/
 export default defineConfig({
   base: "/static/frontend/",
@@ -14,7 +18,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../app/static/frontend",
+    outDir,
     emptyOutDir: true,
   },
 });
