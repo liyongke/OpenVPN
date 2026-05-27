@@ -23,129 +23,31 @@ This page is the high-level entrypoint. Full procedures and incident details are
   - TCP: `10.9.0.0/24`
 - Portal exposed through VPN tunnel by default (not public unless explicitly enabled)
 
-## Design and Workflow Diagram
+## System Diagrams
 
+### Design and Workflow
 
 ![OpenVPN Design and Workflow](docs/diagrams/openvpn-design-workflow.svg)
 
-<details>
-<summary>Show Mermaid source (editable, plugin-friendly)</summary>
+### Runtime Data Flow
 
-```mermaid
-flowchart TB
-  %% ============ A) System Design ============
-  subgraph A["A) System Design"]
-    OP["Operator Device\n(vpn.sh / vpn.ps1 / vpn.cmd)"]
-    CP["Client Profiles\nclients/*.ovpn"]
-    EC2["OpenVPN EC2 Server\nTCP 443 default, UDP 443 optional"]
-    TEL["Telemetry + Metadata\nstatus-tcp/udp + device_hints"]
-    PORTAL["Portal Service\nopenvpn_portal + vpn-portal-tcp/udp"]
+![OpenVPN Runtime Data Flow](docs/diagrams/openvpn-runtime-dataflow.svg)
 
-    TF["Terraform\ninfrastructure/\nS3 remote backend"]
-    OPS["Ops Scripts\nscripts/\nsetup/reconcile/rotate/hooks"]
-    SSM["AWS SSM Control Plane\nsession + send-command"]
+### System Architecture (Style 6: Claude Official)
 
-    OP -->|uses| CP
-    CP -->|connects| EC2
-    EC2 -->|writes| TEL
-    TEL -->|read model| PORTAL
+![OpenVPN System Architecture (Style 6: Claude Official)](docs/diagrams/openvpn-system-architecture-claude.svg)
 
-    TF -->|orchestrates| OPS
-    OPS -->|executes via| SSM
-    SSM -.->|operates| EC2
-    SSM -.->|manages| PORTAL
-  end
+### Portal Operations Views
 
-  %% ============ B) Delivery Workflow ============
-  subgraph B["B) Delivery and Operations Workflow"]
-    W1["1. Review docs + plan"]
-    W2["2. terraform init/plan/apply"]
-    W3["3. bootstrap/update via SSM"]
-    W4["4. validate services + status mapping"]
-    W5["5. connect client + verify route"]
-    W6["6. observe in portal"]
-    W7["7. operate securely\n(reconcile/rotate)"]
-    W8["8. deploy manages env; protect data/"]
-    W9["9. update docs + prompt templates"]
+- Runtime architecture: [docs/diagrams/portal-glass-architecture-style5.svg](docs/diagrams/portal-glass-architecture-style5.svg)
+- Live data flow: [docs/diagrams/portal-glass-live-dataflow-style5.svg](docs/diagrams/portal-glass-live-dataflow-style5.svg)
+- Portal runtime and deployment notes: [openvpn_portal/README.md](openvpn_portal/README.md)
 
-    W1 --> W2 --> W3 --> W4 --> W5 --> W6 --> W7 --> W8 --> W9
-    W9 -.->|continuous loop| W1
-  end
+### CI/CD Deployment Sequence
 
-  classDef ops fill:#eef2ff,stroke:#1e40af,stroke-width:1.5px,color:#111827
-  classDef infra fill:#ecfeff,stroke:#0e7490,stroke-width:1.5px,color:#111827
-  classDef core fill:#fef2f2,stroke:#b91c1c,stroke-width:1.5px,color:#111827
-  classDef flow fill:#ffffff,stroke:#334155,stroke-width:1.2px,color:#111827
+![OpenVPN CI/CD Deployment Sequence](docs/diagrams/openvpn-cicd-ssm-sequence.svg)
 
-  class OP,CP,PORTAL,TEL ops
-  class TF,OPS,SSM infra
-  class EC2 core
-  class W1,W2,W3,W4,W5,W6,W7,W8,W9 flow
-```
-</details>
-
-Diagram assets:
-- Mermaid source (canonical): [docs/diagrams/openvpn-design-workflow.mmd](docs/diagrams/openvpn-design-workflow.mmd)
-- Reference image: [docs/diagrams/openvpn-design-workflow.svg](docs/diagrams/openvpn-design-workflow.svg)
-- CI/CD sequence source: [docs/diagrams/openvpn-cicd-ssm-sequence.mmd](docs/diagrams/openvpn-cicd-ssm-sequence.mmd)
-- Runtime data flow source: [docs/diagrams/openvpn-runtime-dataflow.mmd](docs/diagrams/openvpn-runtime-dataflow.mmd)
-- Diagram catalog: [docs/diagrams/README.md](docs/diagrams/README.md)
-
-## CI/CD Deployment Sequence Diagram
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Dev as Developer
-  participant GH as GitHub Actions
-  participant STS as AWS STS (OIDC)
-  participant S3 as S3 Artifact Bucket
-  participant SSM as AWS SSM
-  participant EC2 as OpenVPN EC2
-  participant Portal as vpn-portal-phase1
-
-  Dev->>GH: Push main / workflow_dispatch
-  GH->>GH: Validate Python, shell, Terraform
-  GH->>GH: Package openvpn_portal artifact
-  GH->>GH: Resolve deploy artifact URI
-  GH->>GH: Fail fast if ARTIFACT_S3_URI empty
-  GH->>STS: Assume role via OIDC
-  STS-->>GH: Temporary credentials
-  GH->>S3: Upload artifact tar.gz
-  GH->>SSM: send-command (deploy script)
-  GH->>SSM: Wait for command-executed
-  GH->>SSM: On waiter failure, fetch invocation output
-  SSM->>EC2: Execute deployment commands
-  EC2->>S3: Download artifact
-  EC2->>Portal: Restart service (systemd)
-  EC2->>EC2: Verify OpenVPN guardrails
-  EC2-->>SSM: Command output + status
-  SSM-->>GH: Invocation result
-  GH->>EC2: Health check via SSM output review
-  GH-->>Dev: Pass / Fail with logs
-```
-
-## Runtime Data Flow Diagram
-
-```mermaid
-flowchart LR
-  CLIENT[VPN Client\nmacOS / Windows / iPhone]
-  TCP[TCP Tunnel\n10.9.0.0/24]
-  UDP[UDP Tunnel\n10.8.0.0/24]
-  OVPN[OpenVPN Server\nopenvpn@server-tcp/udp]
-  STATUS[Status Logs\n/var/log/openvpn/status-tcp.log\n/var/log/openvpn/status-udp.log]
-  HINTS[Device Hints\n/var/log/openvpn/device_hints.json]
-  PORTAL[Portal API/UI\nopenvpn_portal]
-  HISTORY[History DB\nportal_history.db]
-
-  CLIENT --> TCP --> OVPN
-  CLIENT --> UDP --> OVPN
-  OVPN --> STATUS
-  OVPN --> HINTS
-  STATUS --> PORTAL
-  HINTS --> PORTAL
-  PORTAL --> HISTORY
-```
+Full diagram catalog: [docs/diagrams/README.md](docs/diagrams/README.md)
 
 ## Quick Start
 
@@ -203,23 +105,6 @@ Manual dispatch inputs:
 - `deploy` (boolean): run or skip deployment.
 - `instance_id` (string): optional EC2 instance override.
 - `artifact_s3_uri` (string): optional S3 prefix override.
-
-## Documentation Outline
-
-Start with summary pages, then follow links to task guides and deep runbooks.
-
-1. Summary layer
-- [Documentation Hub](docs/README.md): top-level map and operational summary
-- [Project Structure](docs/PROJECT_STRUCTURE.txt): repository layout reference
-
-2. Task guide layer
-- [VPN Script Guide](docs/VPN_SH_GUIDE.md): daily client commands on macOS/Windows
-- [Portal Guide](openvpn_portal/README.md): portal config/runtime/deploy notes
-
-3. Deep reference layer
-- [OpenVPN Runbook](docs/OPENVPN_RUNBOOK.md): deployment, validation, troubleshooting, recovery
-- [AI Skills Prompt Bank](docs/AI_SKILLS_PROMPT_BANK.md): reusable operations/debug prompts
-- [Prompt Templates](.github/prompts): versioned prompt templates
 
 ## Read by Goal
 

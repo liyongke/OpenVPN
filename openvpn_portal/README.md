@@ -2,12 +2,30 @@
 
 This folder contains an isolated portal MVP that does not modify OpenVPN service state.
 
-## Guarantees for Phase 1
+For server-wide deployment guardrails and recovery procedures, see [../docs/OPENVPN_RUNBOOK.md](../docs/OPENVPN_RUNBOOK.md).
+
+## Read-Only Guarantees
 
 - Read-only behavior only.
 - No changes to existing VPN scripts.
 - No restart/reload of OpenVPN.
 - No regeneration of any .ovpn profile.
+
+## Portal Diagrams (Style 5: Glassmorphism)
+
+Portal diagram assets are stored centrally under [../docs/diagrams/README.md](../docs/diagrams/README.md).
+
+### Runtime Architecture
+
+![OpenVPN Portal Runtime Architecture (Style 5 Glassmorphism)](../docs/diagrams/portal-glass-architecture-style5.svg)
+
+Reference: [../docs/diagrams/portal-glass-architecture-style5.svg](../docs/diagrams/portal-glass-architecture-style5.svg)
+
+### Live Data Flow
+
+![OpenVPN Portal Live Data Flow (Style 5 Glassmorphism)](../docs/diagrams/portal-glass-live-dataflow-style5.svg)
+
+Reference: [../docs/diagrams/portal-glass-live-dataflow-style5.svg](../docs/diagrams/portal-glass-live-dataflow-style5.svg)
 
 ## What it shows
 
@@ -108,30 +126,17 @@ EC2 deployment baseline used by this repo:
 - Active VPN services: `openvpn@server-tcp` and `openvpn@server-udp`.
 - Legacy `openvpn-server@server` should stay disabled.
 - Use one project-level venv (`/home/ec2-user/apps/.python-venv` in the standard repo layout) and avoid a second venv inside `openvpn_portal/`.
-- Reconcile systemd unit after deploy from repo root:
-   - `chmod +x scripts/reconcile_portal_service_ssm.sh`
-   - `./scripts/reconcile_portal_service_ssm.sh`
-   - This keeps `vpn-portal-phase1.service` using `run_portal.sh` (env-driven `PORTAL_HOST`) instead of hardcoded `--host 127.0.0.1`.
-   - Service mode sets `RUN_PORTAL_MANAGE_DEPS=0`; dependency install remains enabled for manual/local runs.
+- In service mode, set `RUN_PORTAL_MANAGE_DEPS=0`; dependency install remains enabled for manual/local runs.
 - Server configs include status directives:
    - `/etc/openvpn/server-tcp.conf` -> `/var/log/openvpn/status-tcp.log`
    - `/etc/openvpn/server-udp.conf` -> `/var/log/openvpn/status-udp.log`
 - Keep exactly one `status` directive in each config; duplicated swapped status lines will make protocol rows appear reversed.
 
-## .env File Persistence and Recovery
+## Environment File Notes (Local vs EC2)
 
-**Important:** The `.env` file is not tracked in git and must be backed up and restored after redeployments or EC2 replacement. If missing, the portal may not show sessions or may fail to start.
+Local development:
+- Use `.env` in `openvpn_portal/` when running `./run_portal.sh` manually.
 
-- **Backup:** Save `/home/ec2-user/apps/vpn-portal-phase1-readonly/.env` to a secure location (S3, password manager, or local machine).
-- **Restore:** After redeployment, copy the backup to the same path before starting the portal service.
-- **Automate:** Add a step to your deployment or reconciliation script to restore the `.env` if missing.
-- **Recovery:** If the portal is missing sessions or not starting, restore `.env` and restart the portal service:
-  ```bash
-  sudo systemctl restart vpn-portal-phase1
-  ```
-- **Example .env:**
-  ```
-  PORTAL_HOST=0.0.0.0
-  PORTAL_PORT=8088
-  OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
-  ```
+EC2 deployed services:
+- Deployment manages service-specific environment files (for example `.env.tcp` / `.env.udp`) and restarts portal services as part of CI/CD.
+- For service troubleshooting on EC2, use the runbook source of truth: [../docs/OPENVPN_RUNBOOK.md](../docs/OPENVPN_RUNBOOK.md).

@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="1200" height="760" role="img" aria-labelledby="title desc">
+  <title id="title">OpenVPN Portal Architecture - Glassmorphism Style 5</title>
+  <desc id="desc">Portal runtime architecture showing inputs, portal core, and outputs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="50%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+
+    <radialGradient id="glow-blue" cx="28%" cy="22%" r="44%">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-purple" cx="74%" cy="30%" r="36%">
+      <stop offset="0%" stop-color="#bc8cff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#bc8cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-green" cx="60%" cy="80%" r="45%">
+      <stop offset="0%" stop-color="#3fb950" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#3fb950" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="100%" stop-color="#bc8cff"/>
+    </linearGradient>
+
+    <marker id="arrow-blue" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 9 3, 0 6" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 9 3, 0 6" fill="#3fb950"/>
+    </marker>
+
+    <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <style>
+    text {
+      font-family: Inter, -apple-system, "SF Pro Display", "Segoe UI", Arial, sans-serif;
+      fill: #f0f6fc;
+    }
+    .label { font-size: 13px; fill: #8b949e; letter-spacing: 0.05em; }
+    .node-title { font-size: 16px; font-weight: 700; fill: #f0f6fc; }
+    .node-meta { font-size: 12px; fill: #c9d1d9; }
+    .arrow-text { font-size: 12px; font-weight: 600; fill: #8fbfff; }
+  </style>
+
+  <rect width="1200" height="760" fill="url(#bg)"/>
+  <rect width="1200" height="760" fill="url(#glow-blue)"/>
+  <rect width="1200" height="760" fill="url(#glow-purple)"/>
+  <rect width="1200" height="760" fill="url(#glow-green)"/>
+
+  <text x="600" y="52" text-anchor="middle" font-size="30" font-weight="700" fill="url(#title-grad)">OpenVPN Portal Architecture</text>
+  <text x="600" y="76" text-anchor="middle" font-size="14" fill="#8b949e">Style 5 Glassmorphism - read-only operations dashboard</text>
+
+  <text class="label" x="74" y="128">INPUT LAYER</text>
+  <text class="label" x="488" y="128">PORTAL CORE</text>
+  <text class="label" x="868" y="128">OUTPUT LAYER</text>
+
+  <rect x="50" y="140" width="332" height="520" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.16"/>
+  <rect x="434" y="140" width="332" height="520" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.16"/>
+  <rect x="818" y="140" width="332" height="520" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.16"/>
+
+  <!-- Input cards -->
+  <g filter="url(#soft-shadow)">
+    <rect x="80" y="178" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="92" y1="194" x2="340" y2="194" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="96" y="220">Status Files</text>
+    <text class="node-meta" x="96" y="244">/var/log/openvpn/status-tcp.log</text>
+    <text class="node-meta" x="96" y="264">/var/log/openvpn/status-udp.log</text>
+    <text class="node-meta" x="96" y="284">status-version 3 input</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="80" y="324" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="92" y1="340" x2="340" y2="340" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="96" y="366">Device Hints</text>
+    <text class="node-meta" x="96" y="390">/var/log/openvpn/device_hints.json</text>
+    <text class="node-meta" x="96" y="410">real endpoint first matching</text>
+    <text class="node-meta" x="96" y="430">fallback by user and CN</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="80" y="470" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="92" y1="486" x2="340" y2="486" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="96" y="512">Portal Settings</text>
+    <text class="node-meta" x="96" y="536">OPENVPN_STATUS_FILES</text>
+    <text class="node-meta" x="96" y="556">PORTAL_LIVE_POLL_SECONDS</text>
+    <text class="node-meta" x="96" y="576">PORTAL_HISTORY_DB</text>
+  </g>
+
+  <!-- Core cards -->
+  <g filter="url(#soft-shadow)">
+    <rect x="464" y="178" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.07" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="476" y1="194" x2="724" y2="194" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="480" y="220">openvpn_reader.py</text>
+    <text class="node-meta" x="480" y="244">Parse multi-source status</text>
+    <text class="node-meta" x="480" y="264">Normalize device and protocol</text>
+    <text class="node-meta" x="480" y="284">Compute stable session fields</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="464" y="324" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.07" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="476" y1="340" x2="724" y2="340" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="480" y="366">live_state.py</text>
+    <text class="node-meta" x="480" y="390">Poll and aggregate snapshots</text>
+    <text class="node-meta" x="480" y="410">Raw / trusted / suspect metrics</text>
+    <text class="node-meta" x="480" y="430">SSE fan-out for UI updates</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="464" y="470" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.07" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="476" y1="486" x2="724" y2="486" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="480" y="512">FastAPI main.py</text>
+    <text class="node-meta" x="480" y="536">REST + SSE endpoints</text>
+    <text class="node-meta" x="480" y="556">Jinja templates + static UI</text>
+    <text class="node-meta" x="480" y="576">Read-only operation boundary</text>
+  </g>
+
+  <!-- Output cards -->
+  <g filter="url(#soft-shadow)">
+    <rect x="848" y="178" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="860" y1="194" x2="1108" y2="194" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="864" y="220">Dashboard UI</text>
+    <text class="node-meta" x="864" y="244">index.html and style.css</text>
+    <text class="node-meta" x="864" y="264">live cards and session table</text>
+    <text class="node-meta" x="864" y="284">status source visibility</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="848" y="324" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="860" y1="340" x2="1108" y2="340" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="864" y="366">API + SSE Surface</text>
+    <text class="node-meta" x="864" y="390">/api/sessions /api/summary</text>
+    <text class="node-meta" x="864" y="410">/api/live/sessions stream</text>
+    <text class="node-meta" x="864" y="430">/status-file raw viewer</text>
+  </g>
+
+  <g filter="url(#soft-shadow)">
+    <rect x="848" y="470" width="272" height="118" rx="14" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.22"/>
+    <line x1="860" y1="486" x2="1108" y2="486" stroke="#ffffff" stroke-opacity="0.26"/>
+    <text class="node-title" x="864" y="512">History Store</text>
+    <text class="node-meta" x="864" y="536">data/history.sqlite3</text>
+    <text class="node-meta" x="864" y="556">7 day retention by default</text>
+    <text class="node-meta" x="864" y="576">sampled snapshots</text>
+  </g>
+
+  <!-- Arrows -->
+  <path d="M352 236 L455 236" fill="none" stroke="#58a6ff" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M352 382 L455 382" fill="none" stroke="#58a6ff" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M352 528 L455 528" fill="none" stroke="#58a6ff" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+  <path d="M736 236 L839 236" fill="none" stroke="#58a6ff" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M736 382 L839 382" fill="none" stroke="#58a6ff" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <path d="M736 528 L839 528" fill="none" stroke="#3fb950" stroke-opacity="0.86" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <text class="arrow-text" x="404" y="222" text-anchor="middle">parse()</text>
+  <text class="arrow-text" x="404" y="368" text-anchor="middle">enrich()</text>
+  <text class="arrow-text" x="404" y="514" text-anchor="middle">load settings</text>
+
+  <text class="arrow-text" x="788" y="222" text-anchor="middle">render data</text>
+  <text class="arrow-text" x="788" y="368" text-anchor="middle">serve API</text>
+  <text class="arrow-text" x="788" y="514" text-anchor="middle">write snapshots</text>
+
+  <rect x="50" y="686" width="1100" height="44" rx="10" fill="#ffffff" fill-opacity="0.05" stroke="#ffffff" stroke-opacity="0.18"/>
+  <text x="600" y="714" text-anchor="middle" font-size="13" fill="#8b949e">Portal remains read-only: no disconnect, no quota enforcement, no OpenVPN service mutation.</text>
+</svg>

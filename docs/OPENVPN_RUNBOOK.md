@@ -46,9 +46,12 @@ Related docs:
 ## 2. Architecture
 
 Diagram references:
-- [System Design + Workflow](diagrams/openvpn-design-workflow.mmd)
-- [CI/CD Deployment Sequence](diagrams/openvpn-cicd-ssm-sequence.mmd)
-- [Runtime Data Flow](diagrams/openvpn-runtime-dataflow.mmd)
+- [System Design + Workflow](diagrams/openvpn-design-workflow.svg)
+- [CI/CD Deployment Sequence (SVG)](diagrams/openvpn-cicd-ssm-sequence.svg)
+- [Runtime Data Flow (SVG)](diagrams/openvpn-runtime-dataflow.svg)
+- [System Architecture (Style 6: Claude Official, SVG)](diagrams/openvpn-system-architecture-claude.svg)
+- [Portal Runtime Architecture (Style 5: Glassmorphism, SVG)](diagrams/portal-glass-architecture-style5.svg)
+- [Portal Live Data Flow (Style 5: Glassmorphism, SVG)](diagrams/portal-glass-live-dataflow-style5.svg)
 
 ```
 [ macOS / iPhone ]
@@ -83,18 +86,14 @@ Diagram references:
 
 ## 3. Repository Files
 
-| File/Folder | Purpose |
-|---|---|
-| `vpn.sh`, `vpn.ps1`, `vpn.cmd` | VPN client helpers for macOS, Windows PowerShell, and CMD |
-| `clients/` | All client .ovpn profiles |
-| `scripts/` | All operational shell scripts (including openvpn_setup.sh) |
-| `infrastructure/` | All Terraform and infrastructure-as-code files |
-| `openvpn_portal/` | Python portal app and related files |
-| `keys/` | Key files (private keys should be excluded from git) |
-| `docs/` | All documentation and guides |
-| `.github/` | GitHub workflows, prompts, and Copilot instructions |
-| `.python-venv/` | Local venv (should be in .gitignore) |
-| `portal_credentials.txt` | Generated local artifact (gitignored) written by credential-rotation script |
+Use [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt) for the canonical repository layout.
+
+Operationally relevant folders for this runbook:
+- `infrastructure/`: Terraform resources and backend settings.
+- `scripts/`: setup, reconciliation, and rotation scripts used in procedures below.
+- `clients/`: generated and curated client profiles.
+- `openvpn_portal/`: portal service code and runtime launcher.
+- `docs/`: this runbook plus companion guides.
 
 ---
 
@@ -691,8 +690,8 @@ aws ssm send-command \
 For reusable AI operations/debugging prompts, use:
 
 - [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
-- [.github/copilot-instructions.md](.github/copilot-instructions.md)
-- [.github/prompts](.github/prompts)
+- [.github/copilot-instructions.md](../.github/copilot-instructions.md)
+- [.github/prompts](../.github/prompts)
 
 This file contains reusable prompt templates for triage, root-cause proof, safe change sequencing, drift detection, and regression guardrail extraction.
 
