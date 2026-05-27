@@ -174,13 +174,18 @@ jobs:
         run: |
           aws s3 cp "${{ steps.meta.outputs.artifact_name }}" "${{ steps.meta.outputs.artifact_s3_uri }}"
 
-  deploy:
-    name: Deploy To EC2
+  deploy_ec2_actual:
+    name: Stage 1 - Actual EC2 Deploy
     runs-on: ubuntu-latest
     needs: package
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+    outputs:
+      oidc_role: ${{ steps.oidc_role.outputs.role }}
+      instance_id: ${{ steps.target.outputs.instance_id }}
+      artifact_s3_uri: ${{ steps.deploy_meta.outputs.artifact_s3_uri }}
+      command_id: ${{ steps.ssm_submit.outputs.command_id }}
     steps:
       - name: Resolve OIDC role for branch
         id: oidc_role
@@ -250,8 +255,8 @@ jobs:
           ARTIFACT_URI="${S3_PREFIX%/}/${ARTIFACT_NAME}"
           echo "artifact_s3_uri=$ARTIFACT_URI" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy artifact via SSM
-        id: ssm
+      - name: Submit deploy command via SSM
+        id: ssm_submit
         shell: bash
         env:
           INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
@@ -453,58 +458,6 @@ jobs:
             iptables -I INPUT -s 10.8.0.0/24 -d 10.9.0.1 -p tcp --dport 8088 -j DROP
           echo "Cross-tunnel portal isolation rules applied."
 
-          echo "== OPENVPN STATUS DIRECTIVES =="
-          grep -nE '^status ' /etc/openvpn/server-tcp.conf
-          grep -nE '^status ' /etc/openvpn/server-udp.conf
-
-          TCP_STATUS_COUNT="$(grep -cE '^status ' /etc/openvpn/server-tcp.conf)"
-          UDP_STATUS_COUNT="$(grep -cE '^status ' /etc/openvpn/server-udp.conf)"
-          if [[ "$TCP_STATUS_COUNT" != "1" || "$UDP_STATUS_COUNT" != "1" ]]; then
-            echo "ERROR: Expected exactly one status directive in each server config." >&2
-            exit 1
-          fi
-
-          grep -q '^status /var/log/openvpn/status-tcp.log' /etc/openvpn/server-tcp.conf
-          grep -q '^status /var/log/openvpn/status-udp.log' /etc/openvpn/server-udp.conf
-
-          grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-tcp.conf
-          grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-udp.conf
-
-          systemctl is-active vpn-portal-tcp
-          systemctl is-active vpn-portal-udp
-
-          # Smoke test both portal endpoints on both tunnel bind IPs.
-          # Verify health, SPA root, status-file route, and sidebar telemetry API.
-          check_endpoint() {
-            local bind_ip="$1"
-            local path="$2"
-            local url="http://${bind_ip}:8088${path}"
-            local ok=0
-
-            for _ in $(seq 1 90); do
-              if curl -fsS --max-time 5 "$url" >/dev/null; then
-                ok=1
-                break
-              fi
-              sleep 1
-            done
-
-            if [[ "$ok" != "1" ]]; then
-              echo "ERROR: Portal smoke test failed for ${url}" >&2
-              ss -ltnp | grep ':8088' || true
-              return 1
-            fi
-
-            return 0
-          }
-
-          for BIND_IP in 10.9.0.1 10.8.0.1; do
-            check_endpoint "$BIND_IP" "/healthz"
-            check_endpoint "$BIND_IP" "/"
-            check_endpoint "$BIND_IP" "/status-file"
-            check_endpoint "$BIND_IP" "/api/portal/status"
-          done
-
           echo "ROLLBACK_ARCHIVE=${ROLLBACK_ARCHIVE}"
           EOF
 
@@ -528,7 +481,25 @@ jobs:
 
           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
-          # Poll for up to 10 minutes (120 x 5s) instead of using aws ssm wait (max 2 min).
+  deploy_ssm_check:
+    name: Stage 2 - SSM Deployment Check
+    runs-on: ubuntu-latest
+    needs: deploy_ec2_actual
+    if: ${{ needs.deploy_ec2_actual.outputs.command_id != '' }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.deploy_ec2_actual.outputs.oidc_role }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Wait for SSM deployment command
+        shell: bash
+        env:
+          COMMAND_ID: ${{ needs.deploy_ec2_actual.outputs.command_id }}
+          INSTANCE_ID: ${{ needs.deploy_ec2_actual.outputs.instance_id }}
+        run: |
+          set -euo pipefail
           FINAL_STATUS=""
           for attempt in $(seq 1 120); do
             STATUS_JSON="$(aws ssm get-command-invocation \
@@ -561,12 +532,153 @@ jobs:
             exit 1
           fi
 
-      - name: Fetch SSM output
-        if: ${{ always() && steps.ssm.outputs.command_id != '' }}
+      - name: Fetch deployment SSM output
+        if: ${{ always() }}
         shell: bash
         env:
-          COMMAND_ID: ${{ steps.ssm.outputs.command_id }}
-          INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
+          COMMAND_ID: ${{ needs.deploy_ec2_actual.outputs.command_id }}
+          INSTANCE_ID: ${{ needs.deploy_ec2_actual.outputs.instance_id }}
+        run: |
+          set -euo pipefail
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query '{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
+            --output json
+
+  deploy_post_tests:
+    name: Stage 3 - Post-Deploy Tests
+    runs-on: ubuntu-latest
+    needs:
+      - deploy_ec2_actual
+      - deploy_ssm_check
+    if: ${{ needs.deploy_ssm_check.result == 'success' }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.deploy_ec2_actual.outputs.oidc_role }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run post-deploy checks via SSM
+        id: post_check
+        shell: bash
+        env:
+          INSTANCE_ID: ${{ needs.deploy_ec2_actual.outputs.instance_id }}
+          ARTIFACT_S3_URI: ${{ needs.deploy_ec2_actual.outputs.artifact_s3_uri }}
+        run: |
+          set -euo pipefail
+
+          read -r -d '' POST_CHECK_SCRIPT <<'EOF' || true
+          set -euo pipefail
+
+          echo "== OPENVPN STATUS DIRECTIVES =="
+          grep -nE '^status ' /etc/openvpn/server-tcp.conf
+          grep -nE '^status ' /etc/openvpn/server-udp.conf
+
+          TCP_STATUS_COUNT="$(grep -cE '^status ' /etc/openvpn/server-tcp.conf)"
+          UDP_STATUS_COUNT="$(grep -cE '^status ' /etc/openvpn/server-udp.conf)"
+          if [[ "$TCP_STATUS_COUNT" != "1" || "$UDP_STATUS_COUNT" != "1" ]]; then
+            echo "ERROR: Expected exactly one status directive in each server config." >&2
+            exit 1
+          fi
+
+          grep -q '^status /var/log/openvpn/status-tcp.log' /etc/openvpn/server-tcp.conf
+          grep -q '^status /var/log/openvpn/status-udp.log' /etc/openvpn/server-udp.conf
+          grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-tcp.conf
+          grep -q '^client-connect /etc/openvpn/scripts/client-connect-device-hints.sh' /etc/openvpn/server-udp.conf
+
+          systemctl is-active vpn-portal-tcp
+          systemctl is-active vpn-portal-udp
+
+          check_endpoint() {
+            local bind_ip="$1"
+            local path="$2"
+            local url="http://${bind_ip}:8088${path}"
+            local ok=0
+
+            for _ in $(seq 1 90); do
+              if curl -fsS --max-time 5 "$url" >/dev/null; then
+                ok=1
+                break
+              fi
+              sleep 1
+            done
+
+            if [[ "$ok" != "1" ]]; then
+              echo "ERROR: Portal smoke test failed for ${url}" >&2
+              ss -ltnp | grep ':8088' || true
+              return 1
+            fi
+
+            return 0
+          }
+
+          for BIND_IP in 10.9.0.1 10.8.0.1; do
+            check_endpoint "$BIND_IP" "/healthz"
+            check_endpoint "$BIND_IP" "/"
+            check_endpoint "$BIND_IP" "/status-file"
+            check_endpoint "$BIND_IP" "/api/portal/status"
+          done
+          EOF
+
+          SCRIPT_S3_KEY="${ARTIFACT_S3_URI%/*}/post-check-script-${GITHUB_SHA}.sh"
+          printf '%s' "$POST_CHECK_SCRIPT" > /tmp/post_check_script.sh
+          aws s3 cp /tmp/post_check_script.sh "$SCRIPT_S3_KEY"
+
+          PARAMETERS_JSON="$(cat <<JSON
+          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/post_check_openvpn_portal.sh && bash /tmp/post_check_openvpn_portal.sh"]}
+          JSON
+          )"
+
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "Post-deploy portal checks from GitHub Actions" \
+            --parameters "$PARAMETERS_JSON" \
+            --query 'Command.CommandId' \
+            --output text)"
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+          FINAL_STATUS=""
+          for attempt in $(seq 1 120); do
+            STATUS_JSON="$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query '{Status:Status,StatusDetails:StatusDetails}' \
+              --output json 2>/dev/null || echo '{"Status":"Unknown"}')"
+            CURRENT_STATUS="$(echo "$STATUS_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["Status"])')"
+            echo "[${attempt}/120] Post-check SSM status: $CURRENT_STATUS"
+            case "$CURRENT_STATUS" in
+              Success)
+                FINAL_STATUS="Success"
+                break
+                ;;
+              Failed|Cancelled|TimedOut|Undeliverable|Terminated|ExecutionTimedOut)
+                FINAL_STATUS="$CURRENT_STATUS"
+                break
+                ;;
+            esac
+            sleep 5
+          done
+
+          if [[ "$FINAL_STATUS" != "Success" ]]; then
+            echo "ERROR: Post-deploy check command ended with status '$FINAL_STATUS'." >&2
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query '{Status:Status,StandardOutputContent:StandardOutputContent,StandardErrorContent:StandardErrorContent}' \
+              --output json || true
+            exit 1
+          fi
+
+      - name: Fetch post-deploy SSM output
+        if: ${{ always() && steps.post_check.outputs.command_id != '' }}
+        shell: bash
+        env:
+          COMMAND_ID: ${{ steps.post_check.outputs.command_id }}
+          INSTANCE_ID: ${{ needs.deploy_ec2_actual.outputs.instance_id }}
         run: |
           set -euo pipefail
           aws ssm get-command-invocation \

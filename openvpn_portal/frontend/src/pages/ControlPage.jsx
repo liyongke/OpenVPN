@@ -51,13 +51,13 @@ export function ControlPage() {
   return (
     <section className="panel control-placeholder">
       <p className="eyebrow">Administrative Surface</p>
-      <h2>Control Actions</h2>
+      <h2>Operations Center</h2>
       <p className="sub">
-        Feature-flagged control actions require authentication and are disabled by default.
+        Feature-flagged operations require authentication and are disabled by default.
       </p>
       <div className="chip-row">
         <span className="chip">
-          Control API <strong>{features.enabled ? "enabled" : "disabled"}</strong>
+          Operations API <strong>{features.enabled ? "enabled" : "disabled"}</strong>
         </span>
         <span className="chip">
           Auth <strong>{features.auth_required ? "required" : "optional"}</strong>

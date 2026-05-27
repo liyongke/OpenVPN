@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getHistory7d, getLiveSummary, subscribeLiveSessions } from "../api/client";
+
+const portalIconUrl = "/static/openvpn-icon.svg";
 
 const EMPTY_SNAPSHOT = {
   summary: {
@@ -242,7 +245,7 @@ export function DashboardPage() {
       <header className="top hero">
         <div className="brand-row">
           <div className="brand-title">
-            <img className="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon" />
+            <img className="brand-icon" src={portalIconUrl} alt="OpenVPN icon" />
             <div>
               <p className="eyebrow">OpenVPN Ops Portal</p>
               <h1>Live VPN Dashboard</h1>
@@ -348,41 +351,39 @@ export function DashboardPage() {
       <section className="panel section-panel">
         <div className="section-heading">
           <div>
-            <h2>Status Source</h2>
-            <p className="section-subtitle">Live data is merged from all configured OpenVPN status sources below.</p>
+            <h2>Status Explorer</h2>
+            <p className="section-subtitle">
+              Open the dedicated explorer to inspect raw status lines and switch sources.
+            </p>
           </div>
-          <div className="chip-row" aria-label="Status source summary">
+          <div className="chip-row" aria-label="Status explorer summary">
             <span className="chip">
-              <strong>{statusSources.length}</strong> sources
+              <Link className="chip-link" to="/status-file?filter=all">
+                <strong>{statusSources.length}</strong> sources
+              </Link>
             </span>
             <span className="chip">
-              <strong>{sourceStats.liveSources}</strong> live
+              <Link className="chip-link" to="/status-file?filter=live">
+                <strong>{sourceStats.liveSources}</strong> live
+              </Link>
             </span>
             <span className="chip">
-              <strong>{sourceStats.offlineSources}</strong> offline
+              <Link className="chip-link" to="/status-file?filter=offline">
+                <strong>{sourceStats.offlineSources}</strong> offline
+              </Link>
             </span>
             <span className="chip">
-              <strong>{sourceStats.sourceSessions}</strong> sessions
+              <Link className="chip-link" to="/status-file?filter=all">
+                <strong>{sourceStats.sourceSessions}</strong> sessions
+              </Link>
             </span>
           </div>
         </div>
-        <div className="source-list">
-          {statusSources.length === 0 ? (
-            <p className="section-empty">No status sources are configured.</p>
-          ) : (
-            statusSources.map((source) => (
-              <article className="source-item" key={source.path}>
-                <p className="source-path">
-                  <a href={`/status-file?file=${encodeURIComponent(source.path)}`}>{source.path}</a>
-                </p>
-                <p className="source-meta">
-                  protocol={source.protocol || "unknown"} | exists={String(Boolean(source.exists))} | sessions={
-                    source.session_count || 0
-                  }
-                </p>
-              </article>
-            ))
-          )}
+        <p className="section-subtitle">
+          The source list is shown only in the explorer page to avoid duplication and keep the dashboard focused.
+        </p>
+        <div>
+          <Link to="/status-file">Open Status Explorer</Link>
         </div>
       </section>
 

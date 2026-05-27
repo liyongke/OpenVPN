@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { getPortalStatus } from "../api/client";
 
+const portalIconUrl = "/static/openvpn-icon.svg";
+
 function NavItem({ to, label, muted = false }) {
   return (
     <NavLink
@@ -67,7 +69,7 @@ export function Layout({ children }) {
 
       <aside className="side-nav panel">
         <div className="side-brand">
-          <img className="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon" />
+          <img className="brand-icon" src={portalIconUrl} alt="OpenVPN icon" />
           <div>
             <p className="eyebrow">OpenVPN Ops Portal</p>
             <h1>Portal SPA</h1>
@@ -96,8 +98,8 @@ export function Layout({ children }) {
 
         <nav className="nav-links" aria-label="Primary navigation">
           <NavItem to="/" label="Dashboard" />
-          <NavItem to="/control" label="Control" muted />
-          <NavItem to="/status-file" label="Status File" />
+          <NavItem to="/status-file" label="Status Explorer" />
+          <NavItem to="/operations" label="Operations Center" muted />
         </nav>
       </aside>
 

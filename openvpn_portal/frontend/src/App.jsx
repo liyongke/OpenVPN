@@ -9,8 +9,9 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/control" element={<ControlPage />} />
         <Route path="/status-file" element={<StatusFilePage />} />
+        <Route path="/operations" element={<ControlPage />} />
+        <Route path="/control" element={<Navigate to="/operations" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

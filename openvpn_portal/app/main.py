@@ -307,3 +307,19 @@ def control_page(request: Request):
             "payload": payload,
         },
     )
+
+
+@app.get("/operations")
+def operations_page(request: Request):
+    if frontend_index_file.exists():
+        return FileResponse(frontend_index_file)
+
+    payload = collector.latest_payload
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "title": settings.title,
+            "payload": payload,
+        },
+    )

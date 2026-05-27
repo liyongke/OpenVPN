@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getStatusFile } from "../api/client";
 
+const portalIconUrl = "/static/openvpn-icon.svg";
+
 const EMPTY_STATUS = {
   status_file: "",
   read_error: "",
@@ -15,6 +17,7 @@ const EMPTY_STATUS = {
 export function StatusFilePage() {
   const [searchParams] = useSearchParams();
   const selectedFile = searchParams.get("file") || "";
+  const sourceFilter = (searchParams.get("filter") || "all").toLowerCase();
   const [statusData, setStatusData] = useState(EMPTY_STATUS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,20 +51,40 @@ export function StatusFilePage() {
 
   const statusSources = useMemo(() => statusData.status_sources || [], [statusData.status_sources]);
 
+  const liveCount = useMemo(
+    () => statusSources.filter((source) => Boolean(source.exists)).length,
+    [statusSources],
+  );
+
+  const offlineCount = useMemo(
+    () => Math.max(0, statusSources.length - liveCount),
+    [statusSources, liveCount],
+  );
+
+  const filteredSources = useMemo(() => {
+    if (sourceFilter === "live") {
+      return statusSources.filter((source) => Boolean(source.exists));
+    }
+    if (sourceFilter === "offline") {
+      return statusSources.filter((source) => !Boolean(source.exists));
+    }
+    return statusSources;
+  }, [statusSources, sourceFilter]);
+
   return (
     <>
       <header className="top hero">
         <div className="brand-row">
           <div className="brand-title">
-            <img className="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon" />
+            <img className="brand-icon" src={portalIconUrl} alt="OpenVPN icon" />
             <div>
               <p className="eyebrow">OpenVPN Ops Portal</p>
-              <h1>Status File Viewer</h1>
+              <h1>Status Explorer</h1>
             </div>
           </div>
           <div className="live-pill">Read-only source</div>
         </div>
-        <p className="sub">Showing the latest lines from a selected OpenVPN status source.</p>
+        <p className="sub">Showing the latest lines from selected OpenVPN status sources.</p>
         <p className="source-path">
           <Link to="/">Back to dashboard</Link>
         </p>
@@ -84,22 +107,46 @@ export function StatusFilePage() {
           </span>
         </div>
 
-        {statusSources.length ? (
+        <div className="chip-row" aria-label="Status explorer source filters">
+          <span className={`chip ${sourceFilter === "all" ? "is-active" : ""}`}>
+            <Link className="chip-link" to="/status-file?filter=all">
+              <strong>{statusSources.length}</strong> all
+            </Link>
+          </span>
+          <span className={`chip ${sourceFilter === "live" ? "is-active" : ""}`}>
+            <Link className="chip-link" to="/status-file?filter=live">
+              <strong>{liveCount}</strong> live
+            </Link>
+          </span>
+          <span className={`chip ${sourceFilter === "offline" ? "is-active" : ""}`}>
+            <Link className="chip-link" to="/status-file?filter=offline">
+              <strong>{offlineCount}</strong> offline
+            </Link>
+          </span>
+        </div>
+
+        {filteredSources.length ? (
           <>
             <p className="hint">Switch source:</p>
             <div className="source-list">
-              {statusSources.map((source) => (
+              {filteredSources.map((source) => (
                 <article className="source-item" key={source.path}>
                   <p className="source-path">
-                    <Link to={`/status-file?file=${encodeURIComponent(source.path)}`}>{source.path}</Link>
+                    <Link to={`/status-file?file=${encodeURIComponent(source.path)}&filter=${sourceFilter}`}>
+                      {source.path}
+                    </Link>
                   </p>
                   <p className="source-meta">
-                    protocol={source.protocol || "unknown"} | sessions={source.session_count || 0}
+                    protocol={source.protocol || "unknown"} | exists={String(Boolean(source.exists))} | sessions={
+                      source.session_count || 0
+                    }
                   </p>
                 </article>
               ))}
             </div>
           </>
+        ) : statusSources.length ? (
+          <p className="section-empty">No sources match the selected filter.</p>
         ) : null}
 
         {error ? <p className="error">{error}</p> : null}
@@ -109,7 +156,7 @@ export function StatusFilePage() {
       <section className="panel section-panel">
         <h2>Last 400 Lines</h2>
         {loading ? (
-          <p className="section-empty">Loading status file...</p>
+          <p className="section-empty">Loading status explorer...</p>
         ) : statusData.raw_text ? (
           <pre className="status-content">{statusData.raw_text}</pre>
         ) : (
