@@ -48,6 +48,10 @@ export function getPortalStatus() {
   return fetchJson("/api/portal/status");
 }
 
+export function getBackendMonitoring() {
+  return fetchJson("/api/monitoring/backend");
+}
+
 export function getControlFeatures() {
   return fetchJson("/api/control/features");
 }

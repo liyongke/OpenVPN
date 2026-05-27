@@ -52,9 +52,12 @@ Audit/stability note:
 
 ## What it does not do yet
 
-- No disconnect/block user actions.
+- No VPN session disconnect/block user actions.
 - No server-side quota enforcement.
 - No historical monthly usage unless status snapshots are externally archived.
+
+Control API scope note:
+- Optional control actions are limited to read-safe portal operations (`refresh_snapshot`, `sample_history`) and are gated by feature flag/token.
 
 ## Run locally
 
@@ -79,12 +82,23 @@ Audit/stability note:
 ## API endpoints
 
 - GET /healthz
+- GET /api/portal/status
+- GET /api/monitoring/backend
 - GET /api/sessions
 - GET /api/summary
 - GET /api/live/summary
 - GET /api/live/sessions (SSE stream)
 - GET /api/history/7d
+- GET /api/status-file
+- GET /api/control/features
+- POST /api/control/actions
 - GET /status-file
+
+## SPA routes
+
+- / (Dashboard)
+- /status-file (Status Explorer)
+- /operations (Operations Center)
 
 ## Configuration
 

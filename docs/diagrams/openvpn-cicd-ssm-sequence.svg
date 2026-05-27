@@ -103,7 +103,7 @@
 
   <line x1="370" y1="645" x2="1060" y2="645" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
   <rect x="645" y="629" width="144" height="18" rx="6" fill="#f8fafc" opacity="0.95"/>
-  <text class="msg" x="717" y="642" text-anchor="middle">10. Wait command-executed</text>
+  <text class="msg" x="717" y="642" text-anchor="middle">10. SSM deployment check</text>
 
   <line x1="370" y1="690" x2="1060" y2="690" stroke="#2563eb" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
   <rect x="626" y="674" width="182" height="18" rx="6" fill="#f8fafc" opacity="0.95"/>

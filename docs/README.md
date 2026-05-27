@@ -4,20 +4,24 @@ This folder is the documentation index. It should route readers to the right sou
 
 ## Read by Goal
 
-- Quick project orientation: [../README.md](../README.md)
-- Day-to-day VPN client usage: [VPN_SH_GUIDE.md](VPN_SH_GUIDE.md)
-- Portal runtime/config/deploy behavior: [../openvpn_portal/README.md](../openvpn_portal/README.md)
+- Project overview and quick start: [../README.md](../README.md)
+- VPN client day-to-day usage: [VPN_SH_GUIDE.md](VPN_SH_GUIDE.md)
+- Portal runtime, API, and deploy behavior: [../openvpn_portal/README.md](../openvpn_portal/README.md)
 - Deployment, troubleshooting, and recovery: [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md)
 - Reusable AI prompt workflows: [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
 
-## Documentation Roles
+## Documentation Hierarchy
 
-- [../README.md](../README.md): front page summary and quick entry points.
-- [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md): deep operational source of truth.
-- [VPN_SH_GUIDE.md](VPN_SH_GUIDE.md): client command guide only.
-- [../openvpn_portal/README.md](../openvpn_portal/README.md): portal-specific behavior/configuration.
-- [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt): filesystem/layout snapshot.
-- [diagrams/README.md](diagrams/README.md): diagram inventory and ownership.
+- Level 1 (entrypoint): [../README.md](../README.md)
+	- Project scope, architecture summary, CI/CD overview, and links to deeper docs.
+- Level 2 (domain guides):
+	- [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md): operational source of truth.
+	- [../openvpn_portal/README.md](../openvpn_portal/README.md): backend/frontend portal behavior and APIs.
+	- [VPN_SH_GUIDE.md](VPN_SH_GUIDE.md): client command guide only.
+	- [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md): AI operation templates.
+- Level 3 (references):
+	- [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt): filesystem/layout snapshot.
+	- [diagrams/README.md](diagrams/README.md): diagram inventory and ownership.
 
 ## Diagram Entry Points
 
@@ -34,4 +38,5 @@ This folder is the documentation index. It should route readers to the right sou
 - Keep this file short and navigational.
 - Put procedures and troubleshooting in [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md).
 - Put diagram-specific metadata in [diagrams/README.md](diagrams/README.md).
+- Keep portal endpoint and runtime specifics in [../openvpn_portal/README.md](../openvpn_portal/README.md).
 - When behavior changes, update related docs together: [../README.md](../README.md), [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md), [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md).

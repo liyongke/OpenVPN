@@ -31,6 +31,10 @@ class LiveStateCollector:
         self._last_history_sample_at: datetime | None = None
         self._last_refresh_at: datetime = datetime.now(timezone.utc)
         self._last_broadcast_at: datetime = datetime.now(timezone.utc)
+        self._last_successful_refresh_at: datetime = datetime.now(timezone.utc)
+        self._refresh_attempts: int = 0
+        self._refresh_failures: int = 0
+        self._last_refresh_error: str = ""
 
     @property
     def latest_payload(self) -> dict[str, Any]:
@@ -66,18 +70,45 @@ class LiveStateCollector:
     def last_broadcast_at(self) -> datetime:
         return self._last_broadcast_at
 
+    @property
+    def refresh_attempts(self) -> int:
+        return self._refresh_attempts
+
+    @property
+    def refresh_failures(self) -> int:
+        return self._refresh_failures
+
+    @property
+    def last_refresh_error(self) -> str:
+        return self._last_refresh_error
+
+    @property
+    def last_successful_refresh_at(self) -> datetime:
+        return self._last_successful_refresh_at
+
     def unsubscribe(self, queue: asyncio.Queue[str]) -> None:
         self._subscribers.discard(queue)
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
             now_utc = datetime.now(timezone.utc)
-            next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
-            next_payload["live_source"] = "status_file"
-            payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+            self._refresh_attempts += 1
+            next_payload: dict[str, Any] | None = None
+            payload_changed = False
+
+            try:
+                next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
+                next_payload["live_source"] = "status_file"
+                payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+                self._last_successful_refresh_at = now_utc
+                self._last_refresh_error = ""
+            except Exception as exc:
+                self._refresh_failures += 1
+                self._last_refresh_error = str(exc)
+
             self._last_refresh_at = now_utc
 
-            if payload_changed:
+            if next_payload is not None and payload_changed:
                 self._latest_payload = next_payload
                 await self._broadcast(self._to_sse_event(next_payload))
 
@@ -116,11 +147,23 @@ class LiveStateCollector:
         self._last_broadcast_at = datetime.now(timezone.utc)
 
     async def refresh_once(self, force_broadcast: bool = False) -> bool:
-        next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
-        next_payload["live_source"] = "status_file"
+        now_utc = datetime.now(timezone.utc)
+        self._refresh_attempts += 1
+
+        try:
+            next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
+            next_payload["live_source"] = "status_file"
+        except Exception as exc:
+            self._refresh_failures += 1
+            self._last_refresh_at = now_utc
+            self._last_refresh_error = str(exc)
+            raise
+
         payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
         self._latest_payload = next_payload
-        self._last_refresh_at = datetime.now(timezone.utc)
+        self._last_refresh_at = now_utc
+        self._last_successful_refresh_at = now_utc
+        self._last_refresh_error = ""
 
         if payload_changed or force_broadcast:
             await self._broadcast(self._to_sse_event(next_payload))

@@ -78,13 +78,17 @@ Workflow: `.github/workflows/deploy-openvpn.yml`
 What it does:
 - Validates Python, shell scripts, and Terraform on pull requests.
 - Packages `openvpn_portal/` on `main` and uploads a release artifact to S3.
-- Deploys to EC2 via AWS SSM on `main` (or manual dispatch), then runs health and OpenVPN guardrail checks.
+- Runs staged deployment jobs on `main` (or manual dispatch):
+  - `Deploy to EC2`: submits the deployment SSM command.
+  - `SSM Deployment Check`: waits for command completion and captures invocation output.
+  - `Post-Deploy Tests`: runs OpenVPN guardrails and portal smoke tests via SSM.
 
 Deploy safety behavior:
 - The deploy job resolves `artifact_s3_uri` again in-job from `ARTIFACT_S3_URI` secret (or dispatch override) before SSM execution.
+- `Post-Deploy Tests` also resolves `artifact_s3_uri` from secret/input before uploading and running its post-check script.
 - The workflow fails fast if the resolved `ARTIFACT_S3_URI` is empty, preventing partial/no-op deploy attempts on EC2.
 - The workflow forces JavaScript actions to Node 24 (`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24`) to avoid Node 20 deprecation warnings.
-- If `aws ssm wait command-executed` fails, the workflow immediately fetches and prints `get-command-invocation` output before exiting.
+- Stage 2 and Stage 3 fail fast on failed/timed-out SSM commands and always print `get-command-invocation` output.
 
 Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
@@ -105,6 +109,14 @@ Manual dispatch inputs:
 - `deploy` (boolean): run or skip deployment.
 - `instance_id` (string): optional EC2 instance override.
 - `artifact_s3_uri` (string): optional S3 prefix override.
+
+## Backend Monitoring APIs
+
+- `GET /healthz`: process liveness probe.
+- `GET /api/portal/status`: portal telemetry (source freshness, SSE subscribers, poll cadence).
+- `GET /api/monitoring/backend`: backend collector monitoring (refresh attempts/failures, error rate, last refresh error).
+- `GET /api/live/sessions`: live SSE snapshots.
+- `GET /api/history/7d`: persisted trend history.
 
 ## Read by Goal
 
@@ -128,5 +140,5 @@ Manual dispatch inputs:
 - Do not commit secrets, private keys, or credential files.
 - Prefer SSM-based server operations over ad-hoc SSH.
 - Keep exactly one local project venv (`.python-venv/`).
-- Keep portal `.env` backed up and restore it after redeploy/recovery.
+- Treat EC2 portal `.env.tcp` and `.env.udp` as deploy-managed files and persist only runtime data under `data/`.
 

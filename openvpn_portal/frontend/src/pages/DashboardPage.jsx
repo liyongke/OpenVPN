@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { getHistory7d, getLiveSummary, subscribeLiveSessions } from "../api/client";
 
 const portalIconUrl = "/static/openvpn-icon.svg";
@@ -207,7 +206,6 @@ export function DashboardPage() {
 
   const summary = snapshot.summary || EMPTY_SNAPSHOT.summary;
   const sessions = snapshot.sessions || [];
-  const statusSources = snapshot.status_sources || [];
   const usageUsers = summary.user_usage || [];
 
   const trustedIdentities = Number(summary.unique_identities_trusted || 0);
@@ -216,13 +214,6 @@ export function DashboardPage() {
   const trustShare = rawEndpoints > 0 ? Math.round((trustedEndpoints / rawEndpoints) * 100) : 0;
   const identityDensity = trustedEndpoints > 0 ? trustedIdentities / trustedEndpoints : trustedIdentities;
   const coverageFill = Math.max(6, Math.min(100, trustShare));
-
-  const sourceStats = useMemo(() => {
-    const liveSources = statusSources.filter((source) => Boolean(source.exists)).length;
-    const offlineSources = Math.max(0, statusSources.length - liveSources);
-    const sourceSessions = statusSources.reduce((total, source) => total + Number(source.session_count || 0), 0);
-    return { liveSources, offlineSources, sourceSessions };
-  }, [statusSources]);
 
   const usageStats = useMemo(() => {
     const usageSessions = usageUsers.reduce((total, user) => total + Number(user.session_count || 0), 0);
@@ -346,45 +337,6 @@ export function DashboardPage() {
           </div>
           <p className="hint">Useful audit baseline for real user/device diversity versus transient endpoint storms.</p>
         </article>
-      </section>
-
-      <section className="panel section-panel">
-        <div className="section-heading">
-          <div>
-            <h2>Status Explorer</h2>
-            <p className="section-subtitle">
-              Open the dedicated explorer to inspect raw status lines and switch sources.
-            </p>
-          </div>
-          <div className="chip-row" aria-label="Status explorer summary">
-            <span className="chip">
-              <Link className="chip-link" to="/status-file?filter=all">
-                <strong>{statusSources.length}</strong> sources
-              </Link>
-            </span>
-            <span className="chip">
-              <Link className="chip-link" to="/status-file?filter=live">
-                <strong>{sourceStats.liveSources}</strong> live
-              </Link>
-            </span>
-            <span className="chip">
-              <Link className="chip-link" to="/status-file?filter=offline">
-                <strong>{sourceStats.offlineSources}</strong> offline
-              </Link>
-            </span>
-            <span className="chip">
-              <Link className="chip-link" to="/status-file?filter=all">
-                <strong>{sourceStats.sourceSessions}</strong> sessions
-              </Link>
-            </span>
-          </div>
-        </div>
-        <p className="section-subtitle">
-          The source list is shown only in the explorer page to avoid duplication and keep the dashboard focused.
-        </p>
-        <div>
-          <Link to="/status-file">Open Status Explorer</Link>
-        </div>
       </section>
 
       <section className="panel section-panel">

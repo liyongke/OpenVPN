@@ -294,9 +294,9 @@ Return only:
    - S3 artifact upload/read
    - Deploy artifact metadata resolution (`artifact_s3_uri` non-empty in deploy job)
    - EC2 instance resolution
-   - SSM send-command and command invocation status
-   - Waiter failure diagnostics using `aws ssm get-command-invocation`
-   - Post-deploy health checks (portal + OpenVPN status/device-hints guardrails)
+   - SSM send-command and command invocation status for `Deploy to EC2`
+   - Polling failure diagnostics in `SSM Deployment Check` using `aws ssm get-command-invocation`
+   - Post-deploy health checks in `Post-Deploy Tests` (portal + OpenVPN status/device-hints guardrails)
 3) Lowest-risk correction sequence with rollback per step.
 Avoid suggesting static AWS key usage.
 ```
@@ -329,7 +329,7 @@ Expected output:
 
 ---
 
-## Skill 15: Portal .env File Persistence and Recovery
+## Skill 15: Portal Deploy-Managed Env Persistence and Recovery
 
 When to use:
 - After redeployment, EC2 replacement, or any incident where the portal is missing sessions or fails to start.
@@ -339,12 +339,12 @@ Prompt template:
 
 ```
 Check and enforce persistence of the OpenVPN portal .env file:
-1. Confirm /home/ec2-user/apps/vpn-portal-phase1-readonly/.env exists and contains correct settings.
+1. Confirm deploy-managed files /home/ec2-user/apps/vpn-portal-phase1-readonly/.env.tcp and .env.udp exist and contain correct settings.
 2. If missing, restore from secure backup or recreate with:
-   PORTAL_HOST=0.0.0.0
+   PORTAL_HOST=10.9.0.1 (tcp) or 10.8.0.1 (udp)
    PORTAL_PORT=8088
    OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
-3. Restart the portal service and verify all sessions are visible from all clients.
+3. Restart portal services and verify all sessions are visible from both tunnel entry points.
 4. Recommend backup and automation steps for future deployments.
 Return: validation commands, expected output, and correction steps.
 ```

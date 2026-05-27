@@ -143,6 +143,37 @@ def api_portal_status() -> JSONResponse:
     )
 
 
+@app.get("/api/monitoring/backend")
+def api_monitoring_backend() -> JSONResponse:
+    payload = collector.latest_payload
+    now_utc = datetime.now(timezone.utc)
+
+    last_refresh_age = (now_utc - collector.last_refresh_at).total_seconds()
+    last_successful_refresh_age = (now_utc - collector.last_successful_refresh_at).total_seconds()
+    refresh_attempts = collector.refresh_attempts
+    refresh_failures = collector.refresh_failures
+    refresh_error_rate = 0.0
+    if refresh_attempts > 0:
+        refresh_error_rate = round(refresh_failures / refresh_attempts, 4)
+
+    return JSONResponse(
+        {
+            "backend_online": True,
+            "refresh_attempts": refresh_attempts,
+            "refresh_failures": refresh_failures,
+            "refresh_error_rate": refresh_error_rate,
+            "last_refresh_age_seconds": round(max(0.0, last_refresh_age), 3),
+            "last_successful_refresh_age_seconds": round(max(0.0, last_successful_refresh_age), 3),
+            "last_refresh_error": collector.last_refresh_error,
+            "sse_subscribers": collector.subscriber_count,
+            "status_sources": payload.get("status_sources", []),
+            "generated_at": payload.get("generated_at", ""),
+            "updated_at": payload.get("updated_at", ""),
+            "live_poll_seconds": settings.live_poll_seconds,
+        }
+    )
+
+
 @app.get("/api/control/features")
 def api_control_features() -> JSONResponse:
     return JSONResponse(

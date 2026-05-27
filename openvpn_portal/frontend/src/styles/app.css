@@ -773,6 +773,17 @@ tbody tr:hover {
   font-size: 0.85rem;
 }
 
+.control-result.control-result-error {
+  border-color: rgba(255, 107, 139, 0.35);
+  background: rgba(255, 107, 139, 0.12);
+  color: #ffd7e1;
+}
+
+.monitor-chip-row {
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+
 @keyframes slide-in {
   from {
     opacity: 0;

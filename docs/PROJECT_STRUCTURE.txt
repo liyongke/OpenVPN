@@ -1,12 +1,16 @@
 OpenVPN_deployment/
 |- infrastructure/      # Terraform and IaC
 |- openvpn_portal/      # Portal app source and launcher
+|  |- app/              # FastAPI backend, templates, static assets
+|  |- frontend/         # React + Vite SPA source
+|  `- run_portal.sh     # Local/service launcher
 |- scripts/             # Ops and deployment scripts
 |- clients/             # OpenVPN client profiles
 |- keys/                # Key materials (private keys ignored)
 |- docs/                # Runbooks and guides
 |- .github/             # Prompts, workflows, copilot instructions
 |- .python-venv/        # Single project-level Python virtual environment
+|- data/                # Local portal history data (runtime/local only)
 |- vpn.sh
 |- vpn.ps1
 |- vpn.cmd

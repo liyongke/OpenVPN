@@ -564,9 +564,16 @@ jobs:
         shell: bash
         env:
           INSTANCE_ID: ${{ needs.deploy_ec2_actual.outputs.instance_id }}
-          ARTIFACT_S3_URI: ${{ needs.deploy_ec2_actual.outputs.artifact_s3_uri }}
+          DEFAULT_ARTIFACT_S3_URI: ${{ secrets.ARTIFACT_S3_URI }}
+          INPUT_ARTIFACT_S3_URI: ${{ github.event.inputs.artifact_s3_uri }}
         run: |
           set -euo pipefail
+
+          S3_PREFIX="${INPUT_ARTIFACT_S3_URI:-$DEFAULT_ARTIFACT_S3_URI}"
+          if [[ -z "$S3_PREFIX" ]]; then
+            echo "ERROR: Missing artifact S3 prefix. Set secret ARTIFACT_S3_URI or workflow input artifact_s3_uri." >&2
+            exit 1
+          fi
 
           read -r -d '' POST_CHECK_SCRIPT <<'EOF' || true
           set -euo pipefail
@@ -621,7 +628,7 @@ jobs:
           done
           EOF
 
-          SCRIPT_S3_KEY="${ARTIFACT_S3_URI%/*}/post-check-script-${GITHUB_SHA}.sh"
+          SCRIPT_S3_KEY="${S3_PREFIX%/}/post-check-script-${GITHUB_SHA}.sh"
           printf '%s' "$POST_CHECK_SCRIPT" > /tmp/post_check_script.sh
           aws s3 cp /tmp/post_check_script.sh "$SCRIPT_S3_KEY"
 

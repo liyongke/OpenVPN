@@ -27,7 +27,7 @@ Related docs:
 12. [Fast Recovery Procedure](#12-fast-recovery-procedure)
 13. [Reusable Operations Playbook](#13-reusable-operations-playbook)
 14. [AI Skills Prompt Bank](#14-ai-skills-prompt-bank)
-15. [Portal .env File Persistence and Recovery](#15-portal-env-file-persistence-and-recovery)
+15. [Portal Config and Data Persistence](#15-portal-config-and-data-persistence)
 
 ---
 
@@ -151,11 +151,12 @@ Repository workflow: `.github/workflows/deploy-openvpn.yml`
 
 Pipeline behavior:
 1. Pull requests to `main`: validation only (Python compile, `bash -n`, Terraform validate).
-2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, deploy through SSM.
+2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, and execute staged deploy jobs.
 3. Workflow dispatch: optional manual deploy with `instance_id` and `artifact_s3_uri` overrides.
-4. Deploy job resolves `artifact_s3_uri` in-job from secret/input and fails fast if empty before sending SSM command.
-5. Workflow sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to avoid Node 20 action-runtime deprecation warnings.
-6. If SSM waiter fails, deploy step fetches `get-command-invocation` output immediately for root-cause visibility.
+4. `Deploy to EC2` resolves `artifact_s3_uri` in-job from secret/input, fails fast if empty, and submits SSM deploy command.
+5. `SSM Deployment Check` polls command status and always fetches invocation output on failure.
+6. `Post-Deploy Tests` resolves `artifact_s3_uri` from secret/input, uploads its post-check script, and runs OpenVPN guardrails plus portal endpoint smoke tests through a second SSM command.
+7. Workflow sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to avoid Node 20 action-runtime deprecation warnings.
 
 Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
@@ -536,6 +537,25 @@ curl ifconfig.me          # expect <vpn_server_public_ip>
 # DNS check (should resolve via tunnel DNS, not local router)
 nslookup youtube.com      # expect non-192.168.x.x resolver
 ```
+
+### Portal backend monitoring (API)
+
+```bash
+# Local example
+curl -fsS http://127.0.0.1:8088/healthz | jq .
+curl -fsS http://127.0.0.1:8088/api/portal/status | jq .
+curl -fsS http://127.0.0.1:8088/api/monitoring/backend | jq .
+
+# VPN-only endpoint examples on EC2 tunnel bind addresses
+curl -fsS http://10.9.0.1:8088/api/monitoring/backend | jq .
+curl -fsS http://10.8.0.1:8088/api/monitoring/backend | jq .
+```
+
+Expected monitoring signals:
+- `refresh_failures` remains `0` during normal operation.
+- `refresh_error_rate` remains low and stable.
+- `last_successful_refresh_age_seconds` stays close to `PORTAL_LIVE_POLL_SECONDS`.
+- `last_refresh_error` is empty when the collector loop is healthy.
 
 ---
 
