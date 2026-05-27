@@ -8,76 +8,128 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="container">
-    <header class="top">
-      <div class="brand-title">
-        <img class="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon">
-        <h1>{{ title }}</h1>
+  <div class="bg-orb orb-a" aria-hidden="true"></div>
+  <div class="bg-orb orb-b" aria-hidden="true"></div>
+  <main class="container dashboard-shell">
+    <header class="top hero">
+      <div class="brand-row">
+        <div class="brand-title">
+          <img class="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon">
+          <div>
+            <p class="eyebrow">OpenVPN Ops Portal</p>
+            <h1>{{ title }}</h1>
+          </div>
+        </div>
+        <div class="live-pill" aria-label="Live stream enabled">Live stream enabled</div>
       </div>
-      <p class="sub">Phase 2 is read-only. No control actions are executed from this portal.</p>
+      <p class="sub">Read-only observability surface. No control actions are executed from this portal.</p>
+      <div class="hero-meta">
+        <span>Updated: <strong id="status-updated">loading...</strong></span>
+        <span>Rendered: <strong id="status-rendered">loading...</strong></span>
+        <span>Status files: <strong id="status-exists">loading...</strong></span>
+      </div>
     </header>
 
-    <section class="cards cards-main">
-      <article class="card">
-        <h2>Active Sessions (Raw)</h2>
-        <p class="metric" id="metric-active">{{ payload.summary.active_clients }}</p>
+    <section class="cards cards-main" aria-label="Primary metrics">
+      <article class="card metric-card">
+        <h2>Active Sessions</h2>
+        <p class="metric" id="metric-active">0</p>
+        <p class="metric-foot">Raw status sessions</p>
       </article>
-      <article class="card">
+      <article class="card metric-card trusted">
         <h2>Trusted Sessions</h2>
-        <p class="metric" id="metric-trusted">{{ payload.summary.trusted_active_clients if payload.summary.trusted_active_clients is defined else payload.summary.active_clients }}</p>
+        <p class="metric" id="metric-trusted">0</p>
+        <p class="metric-foot">Identity validated</p>
       </article>
-      <article class="card">
+      <article class="card metric-card suspect">
         <h2>Suspect Sessions</h2>
-        <p class="metric" id="metric-suspect">{{ payload.summary.suspect_active_clients if payload.summary.suspect_active_clients is defined else 0 }}</p>
+        <p class="metric" id="metric-suspect">0</p>
+        <p class="metric-foot">Needs review</p>
       </article>
-      <article class="card">
+      <article class="card metric-card traffic">
         <h2>Total Download</h2>
-        <p class="metric" id="metric-download">{{ payload.summary.total_mib_received }} MiB</p>
+        <p class="metric" id="metric-download">0 MiB</p>
+        <p class="metric-foot">Current snapshot</p>
       </article>
-      <article class="card">
+      <article class="card metric-card traffic">
         <h2>Total Upload</h2>
-        <p class="metric" id="metric-upload">{{ payload.summary.total_mib_sent }} MiB</p>
+        <p class="metric" id="metric-upload">0 MiB</p>
+        <p class="metric-foot">Current snapshot</p>
       </article>
-      <article class="card">
+      <article class="card metric-card mix">
         <h2>Transport</h2>
-        <p class="metric small" id="metric-protocol">TCP {{ payload.summary.protocol_breakdown.tcp if payload.summary.protocol_breakdown else 0 }} / UDP {{ payload.summary.protocol_breakdown.udp if payload.summary.protocol_breakdown else 0 }}</p>
+        <p class="metric small" id="metric-protocol">TCP 0 / UDP 0</p>
+        <p class="metric-foot">Connection split</p>
       </article>
     </section>
 
     <section class="cards cards-sub">
       <article class="card">
         <h2>Device Mix (Trusted)</h2>
-        <p class="metric small" id="metric-device">Phone {{ payload.summary.trusted_device_breakdown.phone if payload.summary.trusted_device_breakdown else 0 }} / PC {{ payload.summary.trusted_device_breakdown.pc if payload.summary.trusted_device_breakdown else 0 }} / Unknown {{ payload.summary.trusted_device_breakdown.unknown if payload.summary.trusted_device_breakdown else 0 }}</p>
+        <p class="metric small" id="metric-device">Phone 0 / PC 0 / Unknown 0</p>
         <p class="hint">Trusted sessions exclude clearly unauthenticated/noise entries. Raw device counts remain available via API summary.</p>
       </article>
-      <article class="card">
+      <article class="card coverage-card">
         <h2>Trusted Identity Coverage</h2>
-        <p class="metric small" id="metric-identities">Identities {{ payload.summary.unique_identities_trusted if payload.summary.unique_identities_trusted is defined else 0 }} / Endpoints {{ payload.summary.unique_real_endpoints_trusted if payload.summary.unique_real_endpoints_trusted is defined else 0 }}</p>
+        <div class="coverage-header">
+          <p class="coverage-kicker">Audit baseline for stable identities versus changing endpoints</p>
+          <span class="coverage-badge" id="metric-coverage-badge">0% trust share</span>
+        </div>
+        <div class="coverage-grid">
+          <div class="coverage-stat">
+            <span class="coverage-stat-value" id="metric-identities">0</span>
+            <span class="coverage-stat-label">Trusted identities</span>
+          </div>
+          <div class="coverage-stat">
+            <span class="coverage-stat-value" id="metric-endpoints-trusted">0</span>
+            <span class="coverage-stat-label">Trusted endpoints</span>
+          </div>
+          <div class="coverage-stat">
+            <span class="coverage-stat-value" id="metric-endpoints-raw">0</span>
+            <span class="coverage-stat-label">Raw endpoints</span>
+          </div>
+        </div>
+        <div class="coverage-bar" aria-hidden="true">
+          <span class="coverage-bar-fill" id="metric-coverage-bar"></span>
+        </div>
+        <div class="coverage-meta">
+          <span><strong id="metric-coverage-trust-share">0%</strong> trusted endpoint share</span>
+          <span><strong id="metric-coverage-density">0.00x</strong> identities per endpoint</span>
+        </div>
         <p class="hint">Useful audit baseline for real user/device diversity versus transient endpoint storms.</p>
       </article>
     </section>
 
-    <section class="panel">
-      <h2>Status Source</h2>
-      <p class="hint">Live data is merged from all configured OpenVPN status sources below.</p>
-      <div class="status-meta">
-        <p>Exists: <span id="status-exists">{{ payload.status_exists }}</span></p>
-        <p>Updated at: <span id="status-updated">{{ payload.updated_at if payload.updated_at else 'n/a' }}</span></p>
-        <p>Rendered at: <span id="status-rendered">{{ payload.generated_at }}</span></p>
+    <section class="panel section-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Status Source</h2>
+          <p class="section-subtitle">Live data is merged from all configured OpenVPN status sources below.</p>
+        </div>
+        <div class="chip-row" id="status-source-chips" aria-label="Status source summary">
+          <span class="chip"><strong id="status-source-total">0</strong> sources</span>
+          <span class="chip"><strong id="status-source-live">0</strong> live</span>
+          <span class="chip"><strong id="status-source-offline">0</strong> offline</span>
+          <span class="chip"><strong id="status-source-sessions">0</strong> sessions</span>
+        </div>
       </div>
       <div class="source-list" id="source-list">
-        {% if payload.status_sources %}
-          {% for source in payload.status_sources %}
-          <p><a href="/status-file?file={{ source.path }}">{{ source.path }}</a> | protocol={{ source.protocol }} | exists={{ source.exists }} | sessions={{ source.session_count }}</p>
-          {% endfor %}
-        {% else %}
-          <p>No status sources are configured.</p>
-        {% endif %}
+        <p class="section-empty">Loading status sources...</p>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Active Sessions</h2>
+    <section class="panel section-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Active Sessions</h2>
+          <p class="section-subtitle">Live sessions with audit labels, protocol mix, and connection details.</p>
+        </div>
+        <div class="chip-row" id="sessions-summary" aria-label="Active session summary">
+          <span class="chip"><strong id="summary-active">0</strong> raw</span>
+          <span class="chip"><strong id="summary-trusted">0</strong> trusted</span>
+          <span class="chip"><strong id="summary-suspect">0</strong> suspect</span>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -97,35 +149,26 @@
             </tr>
           </thead>
           <tbody id="sessions-body">
-            {% if payload.sessions %}
-            {% for session in payload.sessions %}
             <tr>
-              <td>{{ session.username }}</td>
-              <td>{{ session.device_type }}</td>
-              <td>{{ session.device_platform }}</td>
-              <td>{{ session.protocol }}</td>
-              <td>{{ session.common_name }}</td>
-              <td>{{ session.real_address }}</td>
-              <td>{{ session.virtual_address }}</td>
-              <td>{{ session.mib_received }}</td>
-              <td>{{ session.mib_sent }}</td>
-              <td>{{ session.connected_since }}</td>
-              <td>{{ session.connected_for_minutes if session.connected_for_minutes is not none else 'n/a' }}</td>
-              <td>{{ session.audit_class if session.audit_class is defined else 'trusted' }}{% if session.audit_flags is defined and session.audit_flags %} ({{ session.audit_flags|join(', ') }}){% endif %}</td>
+              <td colspan="12">Loading active sessions...</td>
             </tr>
-            {% endfor %}
-            {% else %}
-            <tr>
-              <td colspan="12">No active sessions found in status file.</td>
-            </tr>
-            {% endif %}
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Usage by User (Current Snapshot)</h2>
+    <section class="panel section-panel">
+      <div class="section-heading">
+        <div>
+          <h2>Usage by User (Current Snapshot)</h2>
+          <p class="section-subtitle">Ranked by total traffic so the busiest users stay visible first.</p>
+        </div>
+        <div class="chip-row" id="usage-summary" aria-label="User usage summary">
+          <span class="chip"><strong id="usage-users">0</strong> users</span>
+          <span class="chip"><strong id="usage-sessions">0</strong> sessions</span>
+          <span class="chip"><strong id="usage-top-user">n/a</strong> top user</span>
+        </div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -137,28 +180,29 @@
             </tr>
           </thead>
           <tbody id="usage-body">
-            {% if payload.summary.user_usage %}
-            {% for user in payload.summary.user_usage %}
             <tr>
-              <td>{{ user.username }}</td>
-              <td>{{ user.session_count }}</td>
-              <td>{{ user.mib_received }}</td>
-              <td>{{ user.mib_sent }}</td>
+              <td colspan="4">Loading user usage...</td>
             </tr>
-            {% endfor %}
-            {% else %}
-            <tr>
-              <td colspan="4">No user usage available from current status snapshot.</td>
-            </tr>
-            {% endif %}
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>History (Last 7 Days)</h2>
-      <div id="history-chart" class="history-chart" aria-label="7 day history chart"></div>
+    <section class="panel section-panel">
+      <div class="section-heading">
+        <div>
+          <h2>History (Last 7 Days)</h2>
+          <p class="section-subtitle">Daily snapshots highlight active-client peaks and traffic maxima across the retention window.</p>
+        </div>
+        <div class="chip-row" id="history-summary" aria-label="History summary">
+          <span class="chip"><strong id="history-days">7</strong> days</span>
+          <span class="chip"><strong id="history-samples">0</strong> samples</span>
+          <span class="chip"><strong id="history-latest">n/a</strong> latest</span>
+        </div>
+      </div>
+      <div id="history-chart" class="history-chart" aria-label="7 day history chart">
+        <p class="section-empty">Loading history chart...</p>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -176,7 +220,7 @@
           </thead>
           <tbody id="history-body">
             <tr>
-              <td colspan="9">Collecting history data...</td>
+              <td colspan="9">Loading history data...</td>
             </tr>
           </tbody>
         </table>
@@ -240,6 +284,7 @@
     }
 
     function applySnapshot(payload) {
+      const summary = payload.summary || {};
       setText("metric-active", payload.summary.active_clients);
       setText("metric-trusted", payload.summary.trusted_active_clients ?? payload.summary.active_clients);
       setText("metric-suspect", payload.summary.suspect_active_clients ?? 0);
@@ -251,7 +296,40 @@
       setText("metric-device", `Phone ${dev.phone || 0} / PC ${dev.pc || 0} / Unknown ${dev.unknown || 0}`);
       const trustedIdentities = payload.summary.unique_identities_trusted ?? 0;
       const trustedEndpoints = payload.summary.unique_real_endpoints_trusted ?? 0;
-      setText("metric-identities", `Identities ${trustedIdentities} / Endpoints ${trustedEndpoints}`);
+      const rawEndpoints = payload.summary.unique_real_endpoints_raw ?? 0;
+      const trustShare = rawEndpoints > 0 ? Math.round((trustedEndpoints / rawEndpoints) * 100) : 0;
+      const identityDensity = trustedEndpoints > 0 ? (trustedIdentities / trustedEndpoints) : trustedIdentities;
+
+      setText("metric-identities", trustedIdentities);
+      setText("metric-endpoints-trusted", trustedEndpoints);
+      setText("metric-endpoints-raw", rawEndpoints);
+      setText("metric-coverage-trust-share", `${trustShare}%`);
+      setText("metric-coverage-density", `${identityDensity.toFixed(2)}x`);
+      setText("metric-coverage-badge", `${trustShare}% trust share`);
+
+      const coverageBar = byId("metric-coverage-bar");
+      if (coverageBar) {
+        coverageBar.style.width = `${Math.max(6, Math.min(100, trustShare))}%`;
+      }
+
+      const statusSources = payload.status_sources || [];
+      const liveSources = statusSources.filter((source) => Boolean(source.exists)).length;
+      const offlineSources = Math.max(0, statusSources.length - liveSources);
+      const sourceSessions = statusSources.reduce((total, source) => total + Number(source.session_count || 0), 0);
+      setText("status-source-total", statusSources.length);
+      setText("status-source-live", liveSources);
+      setText("status-source-offline", offlineSources);
+      setText("status-source-sessions", sourceSessions);
+
+      setText("summary-active", payload.summary.active_clients ?? 0);
+      setText("summary-trusted", payload.summary.trusted_active_clients ?? 0);
+      setText("summary-suspect", payload.summary.suspect_active_clients ?? 0);
+
+      const usageUsers = payload.summary.user_usage || [];
+      const usageSessions = usageUsers.reduce((total, user) => total + Number(user.session_count || 0), 0);
+      setText("usage-users", usageUsers.length);
+      setText("usage-sessions", usageSessions);
+      setText("usage-top-user", usageUsers.length ? usageUsers[0].username : "n/a");
 
       setText("status-exists", String(payload.status_exists));
       setText("status-updated", payload.updated_at || "n/a");
@@ -261,19 +339,17 @@
       if (sourceRoot) {
         const sources = payload.status_sources || [];
         if (sources.length === 0) {
-          sourceRoot.innerHTML = `<p>No status sources are configured.</p>`;
+          sourceRoot.innerHTML = `<p class="section-empty">No status sources are configured.</p>`;
           renderSessions(payload.sessions || []);
           renderUsage(payload.summary.user_usage || []);
           return;
         }
 
         sourceRoot.innerHTML = sources.map((s) => `
-          <p>
-            <a href="/status-file?file=${encodeURIComponent(s.path)}">${s.path}</a>
-            | protocol=${s.protocol || 'unknown'}
-            | exists=${String(Boolean(s.exists))}
-            | sessions=${s.session_count || 0}
-          </p>
+          <article class="source-item">
+            <p class="source-path"><a href="/status-file?file=${encodeURIComponent(s.path)}">${s.path}</a></p>
+            <p class="source-meta">protocol=${s.protocol || 'unknown'} | exists=${String(Boolean(s.exists))} | sessions=${s.session_count || 0}</p>
+          </article>
         `).join("");
       }
 
@@ -369,6 +445,9 @@
         const data = await res.json();
         const days = data.days || [];
         renderHistoryChart(days);
+        setText("history-days", days.length || 0);
+        setText("history-samples", days.reduce((total, day) => total + Number(day.sample_count || 0), 0));
+        setText("history-latest", days.length ? (days[days.length - 1].last_sampled_at || days[days.length - 1].day || "n/a") : "n/a");
         if (!days.length) {
           body.innerHTML = '<tr><td colspan="9">No history yet. This table fills as snapshots are collected.</td></tr>';
           return;
@@ -413,6 +492,13 @@
     refreshHistory();
     setInterval(refreshHistory, 30000);
     startLiveStream();
+
+    fetch("/api/live/summary", { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+      .then((payload) => applySnapshot(payload))
+      .catch((err) => {
+        console.error("Initial snapshot load failed", err);
+      });
   </script>
 </body>
 </html>

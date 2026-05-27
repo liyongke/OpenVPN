@@ -8,26 +8,39 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="container">
-    <header class="top">
-      <div class="brand-title">
-        <img class="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon">
-        <h1>Status File Viewer</h1>
+  <div class="bg-orb orb-a" aria-hidden="true"></div>
+  <div class="bg-orb orb-b" aria-hidden="true"></div>
+  <main class="container dashboard-shell">
+    <header class="top hero">
+      <div class="brand-row">
+        <div class="brand-title">
+          <img class="brand-icon" src="/static/openvpn-icon.svg" alt="OpenVPN icon">
+          <div>
+            <p class="eyebrow">OpenVPN Ops Portal</p>
+            <h1>Status File Viewer</h1>
+          </div>
+        </div>
+        <div class="live-pill">Read-only source</div>
       </div>
       <p class="sub">Showing the latest lines from a selected OpenVPN status source.</p>
-      <p><a href="/">Back to dashboard</a></p>
+      <p class="source-path"><a href="/">Back to dashboard</a></p>
     </header>
 
     <section class="panel">
       <h2>Source</h2>
-      <p>Path: {{ status_file }}</p>
-      <p>Exists: {{ payload.status_exists }}</p>
-      <p>Updated at: {{ payload.updated_at if payload.updated_at else 'n/a' }}</p>
+      <div class="hero-meta">
+        <span>Path: <strong>{{ status_file }}</strong></span>
+        <span>Exists: <strong>{{ payload.status_exists }}</strong></span>
+        <span>Updated at: <strong>{{ payload.updated_at if payload.updated_at else 'n/a' }}</strong></span>
+      </div>
       {% if payload.status_sources %}
       <p>Switch source:</p>
       <div class="source-list">
         {% for source in payload.status_sources %}
-        <p><a href="/status-file?file={{ source.path | urlencode }}">{{ source.path }}</a> | protocol={{ source.protocol }} | sessions={{ source.session_count }}</p>
+        <article class="source-item">
+          <p class="source-path"><a href="/status-file?file={{ source.path | urlencode }}">{{ source.path }}</a></p>
+          <p class="source-meta">protocol={{ source.protocol }} | sessions={{ source.session_count }}</p>
+        </article>
         {% endfor %}
       </div>
       {% endif %}
