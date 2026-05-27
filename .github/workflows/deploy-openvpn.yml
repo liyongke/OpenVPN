@@ -175,14 +175,13 @@ jobs:
           aws s3 cp "${{ steps.meta.outputs.artifact_name }}" "${{ steps.meta.outputs.artifact_s3_uri }}"
 
   deploy_ec2_actual:
-    name: Stage 1 - Actual EC2 Deploy
+    name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: package
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
     outputs:
-      oidc_role: ${{ steps.oidc_role.outputs.role }}
       instance_id: ${{ steps.target.outputs.instance_id }}
       artifact_s3_uri: ${{ steps.deploy_meta.outputs.artifact_s3_uri }}
       command_id: ${{ steps.ssm_submit.outputs.command_id }}
@@ -482,7 +481,7 @@ jobs:
           echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
   deploy_ssm_check:
-    name: Stage 2 - SSM Deployment Check
+    name: SSM Deployment Check
     runs-on: ubuntu-latest
     needs: deploy_ec2_actual
     if: ${{ needs.deploy_ec2_actual.outputs.command_id != '' }}
@@ -490,7 +489,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.deploy_ec2_actual.outputs.oidc_role }}
+          role-to-assume: ${{ github.ref_name == 'main' && secrets.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME_DEV }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Wait for SSM deployment command
@@ -547,7 +546,7 @@ jobs:
             --output json
 
   deploy_post_tests:
-    name: Stage 3 - Post-Deploy Tests
+    name: Post-Deploy Tests
     runs-on: ubuntu-latest
     needs:
       - deploy_ec2_actual
@@ -557,7 +556,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ needs.deploy_ec2_actual.outputs.oidc_role }}
+          role-to-assume: ${{ github.ref_name == 'main' && secrets.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME_DEV }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Run post-deploy checks via SSM
