@@ -239,24 +239,6 @@ export function StatusFilePage() {
         {error ? <p className="error">{error}</p> : null}
         {statusData.read_error ? <p className="error">{statusData.read_error}</p> : null}
       </section>
-
-      <section className="panel section-panel">
-        <details className="raw-view">
-          <summary className="raw-view-summary">Full Raw View</summary>
-          <div className="raw-view-body">
-            <p className="status-scroll-hint">Legacy single-block raw output, kept for quick copy or full-file scanning.</p>
-            {loading ? (
-              <p className="section-empty">Loading status explorer...</p>
-            ) : statusData.read_error ? (
-              <p className="error">{statusData.read_error}</p>
-            ) : statusData.raw_text ? (
-              <pre className="status-content">{statusData.raw_text}</pre>
-            ) : (
-              <p className="section-empty">No readable content available.</p>
-            )}
-          </div>
-        </details>
-      </section>
     </>
   );
 }

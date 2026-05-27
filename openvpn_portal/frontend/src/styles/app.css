@@ -642,40 +642,14 @@ body {
 }
 
 .status-content-inline {
-  height: clamp(220px, 48vh, 600px);
+  height: auto;
+  max-height: clamp(160px, 48vh, 600px);
 }
 
 .status-scroll-hint {
   margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
-}
-
-.raw-view {
-  border: 1px solid rgba(151, 180, 225, 0.16);
-  border-radius: 10px;
-  background: rgba(12, 22, 38, 0.6);
-  padding: 0;
-}
-
-.raw-view-summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 10px 12px;
-  color: var(--brand-strong);
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.raw-view-summary::-webkit-details-marker {
-  display: none;
-}
-
-.raw-view-body {
-  border-top: 1px solid rgba(151, 180, 225, 0.12);
-  padding: 10px 12px 12px;
-  display: grid;
-  gap: 8px;
 }
 
 table {

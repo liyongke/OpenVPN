@@ -235,6 +235,47 @@ export function ControlPage() {
           {monitoringError ? <p className="control-result control-result-error">{monitoringError}</p> : null}
         </article>
 
+        <article className="control-card">
+          <h3>Credentials</h3>
+          <label className="control-label" htmlFor="control-token">
+            Bearer token
+          </label>
+          <input
+            id="control-token"
+            className="control-input"
+            type="password"
+            autoComplete="off"
+            placeholder="Enter control token"
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+          />
+          <p className="hint">Token is sent only when executing actions.</p>
+        </article>
+
+        <article className="control-card">
+          <h3>Actions</h3>
+          <div className="control-actions">
+            <button
+              type="button"
+              className="control-button"
+              disabled={!features.enabled || !allowedActions.has("refresh_snapshot") || loadingAction !== ""}
+              onClick={() => execute("refresh_snapshot")}
+            >
+              {loadingAction === "refresh_snapshot" ? "Running..." : "Refresh Live Snapshot"}
+            </button>
+            <button
+              type="button"
+              className="control-button"
+              disabled={!features.enabled || !allowedActions.has("sample_history") || loadingAction !== ""}
+              onClick={() => execute("sample_history")}
+            >
+              {loadingAction === "sample_history" ? "Running..." : "Insert History Sample"}
+            </button>
+          </div>
+          {!features.enabled ? <p className="hint">Enable with PORTAL_CONTROL_ENABLED=1 on backend.</p> : null}
+          {result ? <p className="control-result">{result}</p> : null}
+        </article>
+
         <article className="control-card map-card map-card-bottom">
           <h3>Session Geo Map</h3>
           <div className="chip-row monitor-chip-row" aria-label="Session map summary">
@@ -304,47 +345,6 @@ export function ControlPage() {
 
           {mapError ? <p className="control-result control-result-error">{mapError}</p> : null}
           <p className="hint">Hover markers for quick geo session details. Location is IP-based and approximate.</p>
-        </article>
-
-        <article className="control-card">
-          <h3>Credentials</h3>
-          <label className="control-label" htmlFor="control-token">
-            Bearer token
-          </label>
-          <input
-            id="control-token"
-            className="control-input"
-            type="password"
-            autoComplete="off"
-            placeholder="Enter control token"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <p className="hint">Token is sent only when executing actions.</p>
-        </article>
-
-        <article className="control-card">
-          <h3>Actions</h3>
-          <div className="control-actions">
-            <button
-              type="button"
-              className="control-button"
-              disabled={!features.enabled || !allowedActions.has("refresh_snapshot") || loadingAction !== ""}
-              onClick={() => execute("refresh_snapshot")}
-            >
-              {loadingAction === "refresh_snapshot" ? "Running..." : "Refresh Live Snapshot"}
-            </button>
-            <button
-              type="button"
-              className="control-button"
-              disabled={!features.enabled || !allowedActions.has("sample_history") || loadingAction !== ""}
-              onClick={() => execute("sample_history")}
-            >
-              {loadingAction === "sample_history" ? "Running..." : "Insert History Sample"}
-            </button>
-          </div>
-          {!features.enabled ? <p className="hint">Enable with PORTAL_CONTROL_ENABLED=1 on backend.</p> : null}
-          {result ? <p className="control-result">{result}</p> : null}
         </article>
       </div>
     </section>
