@@ -29,6 +29,8 @@ class LiveStateCollector:
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._last_history_sample_at: datetime | None = None
+        self._last_refresh_at: datetime = datetime.now(timezone.utc)
+        self._last_broadcast_at: datetime = datetime.now(timezone.utc)
 
     @property
     def latest_payload(self) -> dict[str, Any]:
@@ -52,6 +54,18 @@ class LiveStateCollector:
         await queue.put(self._to_sse_event(self._latest_payload))
         return queue
 
+    @property
+    def subscriber_count(self) -> int:
+        return len(self._subscribers)
+
+    @property
+    def last_refresh_at(self) -> datetime:
+        return self._last_refresh_at
+
+    @property
+    def last_broadcast_at(self) -> datetime:
+        return self._last_broadcast_at
+
     def unsubscribe(self, queue: asyncio.Queue[str]) -> None:
         self._subscribers.discard(queue)
 
@@ -61,6 +75,7 @@ class LiveStateCollector:
             next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
             next_payload["live_source"] = "status_file"
             payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+            self._last_refresh_at = now_utc
 
             if payload_changed:
                 self._latest_payload = next_payload
@@ -97,6 +112,20 @@ class LiveStateCollector:
 
         for queue in stale_queues:
             self._subscribers.discard(queue)
+
+        self._last_broadcast_at = datetime.now(timezone.utc)
+
+    async def refresh_once(self, force_broadcast: bool = False) -> bool:
+        next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
+        next_payload["live_source"] = "status_file"
+        payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+        self._latest_payload = next_payload
+        self._last_refresh_at = datetime.now(timezone.utc)
+
+        if payload_changed or force_broadcast:
+            await self._broadcast(self._to_sse_event(next_payload))
+
+        return payload_changed
 
     @staticmethod
     def _to_sse_event(payload: dict[str, Any]) -> str:

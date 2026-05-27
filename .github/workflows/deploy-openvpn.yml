@@ -64,6 +64,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: openvpn_portal/frontend/package-lock.json
+
       - name: Install portal dependencies
         run: |
           python3 -m pip install --upgrade pip
@@ -71,6 +78,12 @@ jobs:
 
       - name: Python syntax check
         run: python3 -m compileall -q openvpn_portal
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix openvpn_portal/frontend
+
+      - name: Frontend build check
+        run: npm run build --prefix openvpn_portal/frontend
 
       - name: Shell syntax check
         shell: bash
@@ -101,6 +114,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: openvpn_portal/frontend/package-lock.json
 
       - name: Verify OIDC role secret
         shell: bash
@@ -133,6 +153,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          npm ci --prefix openvpn_portal/frontend
+          npm run build --prefix openvpn_portal/frontend
           tar -czf "${{ steps.meta.outputs.artifact_name }}" -C openvpn_portal .
 
       - name: Upload workflow artifact
@@ -451,21 +473,36 @@ jobs:
           systemctl is-active vpn-portal-tcp
           systemctl is-active vpn-portal-udp
 
-          # Health check both portal endpoints
-          for BIND_IP in 10.9.0.1 10.8.0.1; do
-            HEALTH_OK=0
+          # Smoke test both portal endpoints on both tunnel bind IPs.
+          # Verify health, SPA root, status-file route, and sidebar telemetry API.
+          check_endpoint() {
+            local bind_ip="$1"
+            local path="$2"
+            local url="http://${bind_ip}:8088${path}"
+            local ok=0
+
             for _ in $(seq 1 90); do
-              if curl -fsS --max-time 5 "http://${BIND_IP}:8088/healthz" >/dev/null; then
-                HEALTH_OK=1
+              if curl -fsS --max-time 5 "$url" >/dev/null; then
+                ok=1
                 break
               fi
               sleep 1
             done
-            if [[ "$HEALTH_OK" != "1" ]]; then
-              echo "ERROR: Portal health check failed for http://${BIND_IP}:8088/healthz" >&2
+
+            if [[ "$ok" != "1" ]]; then
+              echo "ERROR: Portal smoke test failed for ${url}" >&2
               ss -ltnp | grep ':8088' || true
-              exit 1
+              return 1
             fi
+
+            return 0
+          }
+
+          for BIND_IP in 10.9.0.1 10.8.0.1; do
+            check_endpoint "$BIND_IP" "/healthz"
+            check_endpoint "$BIND_IP" "/"
+            check_endpoint "$BIND_IP" "/status-file"
+            check_endpoint "$BIND_IP" "/api/portal/status"
           done
 
           echo "ROLLBACK_ARCHIVE=${ROLLBACK_ARCHIVE}"

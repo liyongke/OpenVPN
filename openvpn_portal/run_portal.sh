@@ -26,6 +26,19 @@ if [[ "$MANAGE_DEPS" == "1" ]]; then
   "$VENV_PYTHON" -m pip install -r requirements.txt >/dev/null
 fi
 
+BUILD_FRONTEND="${RUN_PORTAL_BUILD_FRONTEND:-0}"
+if [[ "$BUILD_FRONTEND" == "1" ]]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "RUN_PORTAL_BUILD_FRONTEND=1 requested, but npm is not installed" >&2
+    exit 1
+  fi
+  (
+    cd "$SCRIPT_DIR/frontend"
+    npm install
+    npm run build
+  )
+fi
+
 HOST="${PORTAL_HOST:-0.0.0.0}"
 PORT="${PORTAL_PORT:-8088}"
 

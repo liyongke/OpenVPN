@@ -18,6 +18,20 @@ class Settings:
     history_sample_seconds: int
     live_poll_seconds: float
     device_hints_file: str
+    control_enabled: bool
+    control_token: str
+    control_allowed_actions: list[str]
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _parse_csv_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _detect_status_file() -> str:
@@ -66,6 +80,9 @@ def _detect_status_files() -> list[str]:
 
 def load_settings() -> Settings:
     status_files = _detect_status_files()
+    control_actions = _parse_csv_list(
+        os.getenv("PORTAL_CONTROL_ALLOWED_ACTIONS", "refresh_snapshot,sample_history")
+    )
     return Settings(
         host=os.getenv("PORTAL_HOST", "0.0.0.0"),
         port=int(os.getenv("PORTAL_PORT", "8088")),
@@ -78,4 +95,7 @@ def load_settings() -> Settings:
         history_sample_seconds=int(os.getenv("PORTAL_HISTORY_SAMPLE_SECONDS", "60")),
         live_poll_seconds=float(os.getenv("PORTAL_LIVE_POLL_SECONDS", "1.0")),
         device_hints_file=os.getenv("PORTAL_DEVICE_HINTS_FILE", "/var/log/openvpn/device_hints.json"),
+        control_enabled=_env_flag("PORTAL_CONTROL_ENABLED", default=False),
+        control_token=os.getenv("PORTAL_CONTROL_TOKEN", "").strip(),
+        control_allowed_actions=control_actions,
     )
