@@ -36,9 +36,12 @@ Reference: [../docs/diagrams/portal-glass-live-dataflow-style5.svg](../docs/diag
 - Live auto-refresh dashboard updates using server-sent events (SSE).
 - Built-in daily history for the last 7 days (SQLite-backed snapshots).
 - Status Source panel shows configured status files once, with per-source protocol/session details and links to the status viewer.
+- Status Explorer supports per-source inline log expand/collapse and keeps an optional collapsed full raw view for quick copy/audit.
 - Per-session protocol (TCP/UDP) and device hints (phone/pc/unknown).
 - Per-session audit classification with flags (for example `unidentified`, `zero_traffic`).
 - History panel is placed at the bottom of the dashboard for cleaner top-level monitoring.
+- Operations Center places backend monitoring first, then a full-width Session Geo Map, followed by credentials and actions.
+- SPA and backend pages both use the canonical icon endpoint `/static/openvpn-icon.svg`.
 
 Device identification note:
 - OpenVPN status files do not include a reliable phone/pc field by default.
