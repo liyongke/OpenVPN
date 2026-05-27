@@ -267,6 +267,16 @@ body {
   box-shadow: 0 0 0 6px rgba(74, 208, 168, 0.18);
 }
 
+.status-hero-controls {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.status-hero-chip-row {
+  justify-content: flex-end;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -583,13 +593,19 @@ body {
   border: 1px solid #223656;
   border-radius: 12px;
   padding: 14px;
-  max-height: 65vh;
+  max-height: 72vh;
   overflow: auto;
   font-size: 0.84rem;
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.status-scroll-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 table {
@@ -831,6 +847,15 @@ tbody tr:hover {
   .brand-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .status-hero-controls {
+    justify-items: flex-start;
+    width: 100%;
+  }
+
+  .status-hero-chip-row {
+    justify-content: flex-start;
   }
 
   .cards-sub {

@@ -10,19 +10,23 @@ tfplan
 tfplan_*
 
 # OpenVPN secrets and generated client profiles
-*.pem
 *.key
 *.ovpn
 *.ovpn.bak
+*.pem
 
-# Local runtime artifacts
+# Local runtime/build artifacts
 *.log
 *.pid
+*.pyc
+__pycache__/
 .python-venv/
 .venv/
-__pycache__/
-*.pyc
+local_run/
 portal_credentials.txt
+
+# Local assistant/tooling artifacts
+.github/skills/fireworks-tech-graph
 
 # Archives and local bundles
 *.zip

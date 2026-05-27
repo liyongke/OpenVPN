@@ -14,6 +14,8 @@ const EMPTY_STATUS = {
   status_sources: [],
 };
 
+const STATUS_LINE_COUNT = 800;
+
 export function StatusFilePage() {
   const [searchParams] = useSearchParams();
   const selectedFile = searchParams.get("file") || "";
@@ -27,7 +29,7 @@ export function StatusFilePage() {
     setLoading(true);
     setError("");
 
-    getStatusFile(selectedFile, 400)
+    getStatusFile(selectedFile, STATUS_LINE_COUNT)
       .then((payload) => {
         if (mounted) {
           setStatusData(payload);
@@ -82,7 +84,26 @@ export function StatusFilePage() {
               <h1>Status Explorer</h1>
             </div>
           </div>
-          <div className="live-pill">Read-only source</div>
+          <div className="status-hero-controls">
+            <div className="live-pill">Read-only source</div>
+            <div className="chip-row status-hero-chip-row" aria-label="Status explorer source filters">
+              <span className={`chip ${sourceFilter === "all" ? "is-active" : ""}`}>
+                <Link className="chip-link" to="/status-file?filter=all">
+                  <strong>{statusSources.length}</strong> all
+                </Link>
+              </span>
+              <span className={`chip ${sourceFilter === "live" ? "is-active" : ""}`}>
+                <Link className="chip-link" to="/status-file?filter=live">
+                  <strong>{liveCount}</strong> live
+                </Link>
+              </span>
+              <span className={`chip ${sourceFilter === "offline" ? "is-active" : ""}`}>
+                <Link className="chip-link" to="/status-file?filter=offline">
+                  <strong>{offlineCount}</strong> offline
+                </Link>
+              </span>
+            </div>
+          </div>
         </div>
         <p className="sub">Showing the latest lines from selected OpenVPN status sources.</p>
         <p className="source-path">
@@ -104,24 +125,6 @@ export function StatusFilePage() {
           </span>
           <span>
             Generated at: <strong>{statusData.generated_at || "n/a"}</strong>
-          </span>
-        </div>
-
-        <div className="chip-row" aria-label="Status explorer source filters">
-          <span className={`chip ${sourceFilter === "all" ? "is-active" : ""}`}>
-            <Link className="chip-link" to="/status-file?filter=all">
-              <strong>{statusSources.length}</strong> all
-            </Link>
-          </span>
-          <span className={`chip ${sourceFilter === "live" ? "is-active" : ""}`}>
-            <Link className="chip-link" to="/status-file?filter=live">
-              <strong>{liveCount}</strong> live
-            </Link>
-          </span>
-          <span className={`chip ${sourceFilter === "offline" ? "is-active" : ""}`}>
-            <Link className="chip-link" to="/status-file?filter=offline">
-              <strong>{offlineCount}</strong> offline
-            </Link>
           </span>
         </div>
 
@@ -154,7 +157,10 @@ export function StatusFilePage() {
       </section>
 
       <section className="panel section-panel">
-        <h2>Last 400 Lines</h2>
+        <h2>Last {STATUS_LINE_COUNT} Lines</h2>
+        <p className="status-scroll-hint">
+          Scroll inside the panel to inspect older lines from the latest {STATUS_LINE_COUNT} entries.
+        </p>
         {loading ? (
           <p className="section-empty">Loading status explorer...</p>
         ) : statusData.raw_text ? (
