@@ -62,9 +62,9 @@
   <text class="nodeBody" x="60" y="262">real_endpoints -> real_ip -> username -> CN</text>
   <text class="nodeBody" x="60" y="280">Shared-NAT guard avoids IP-only collisions</text>
   <rect class="node" x="46" y="302" width="292" height="72"/>
-  <text class="nodeTitle" x="60" y="326">Control Request + Token</text>
-  <text class="nodeBody" x="60" y="346">POST /api/control/actions</text>
-  <text class="nodeBody" x="60" y="364">Feature flag and auth gate before action</text>
+  <text class="nodeTitle" x="60" y="326">Control Auth (User/Pass Session)</text>
+  <text class="nodeBody" x="60" y="346">POST /api/control/auth/login -> session token</text>
+  <text class="nodeBody" x="60" y="364">Token gates /api/control/actions</text>
 
   <rect class="group" x="386" y="94" width="470" height="528" rx="14"/>
   <text class="groupLabel" x="402" y="118">BACKEND CORE</text>
@@ -124,7 +124,7 @@
   <rect class="api" x="620" y="736" width="274" height="50"/>
   <text class="apiText" x="634" y="765">GET /api/status-file (raw tail)</text>
   <rect class="api" x="906" y="736" width="326" height="50"/>
-  <text class="apiText" x="920" y="765">POST /api/control/actions + GET /api/control/features</text>
+  <text class="apiText" x="920" y="765">/api/control/features + /auth/login + /actions</text>
 
   <path class="arrowData" d="M338 168 L408 168" marker-end="url(#arrowBlue)"/>
   <rect class="labelBg" x="350" y="148" width="44" height="16"/>

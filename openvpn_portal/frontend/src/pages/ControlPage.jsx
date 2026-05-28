@@ -12,6 +12,7 @@ import "leaflet/dist/leaflet.css";
 
 const DEFAULT_FEATURES = {
   enabled: false,
+  control_available: false,
   auth_required: true,
   allowed_actions: [],
 };
@@ -234,6 +235,8 @@ export function ControlPage() {
 
   const showAuthOptional = !features.auth_required && features.auth_mode !== "userpass_session";
   const isUnlocked = Boolean(features.enabled);
+  const operationsState =
+    features.enabled ? "enabled" : features.control_available && features.auth_required ? "locked" : "disabled";
 
   return (
     <section className="panel control-placeholder">
@@ -244,7 +247,7 @@ export function ControlPage() {
         </div>
         <div className="chip-row control-header-chips" aria-label="Operations status summary">
           <span className="chip">
-            Operations API <strong>{features.enabled ? "enabled" : "disabled"}</strong>
+            Operations API <strong>{operationsState}</strong>
           </span>
           <span className="chip">
             Auth <strong>{features.auth_required ? "required" : "optional"}</strong>

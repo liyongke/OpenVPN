@@ -13,8 +13,8 @@ Related diagram:
 - `load_settings()` reads env vars for status files, history DB, live polling, device hints, and control options.
 - Key behavior:
   - `OPENVPN_STATUS_FILES` is preferred over `OPENVPN_STATUS_FILE`.
-  - Control actions are feature-flagged by `PORTAL_CONTROL_ENABLED`.
-  - Control token enforcement is enabled when `PORTAL_CONTROL_TOKEN` is non-empty.
+  - Control auth session mode is enabled when both `PORTAL_CONTROL_AUTH_USERNAME` and `PORTAL_CONTROL_AUTH_PASSWORD` are configured.
+  - Legacy feature-flag/token mode is used only when auth-session credentials are not configured.
 
 Primary code:
 - [openvpn_portal/app/config.py](../openvpn_portal/app/config.py)
@@ -64,8 +64,9 @@ Primary code:
 - [openvpn_portal/app/services/geoip.py](../openvpn_portal/app/services/geoip.py)
 
 ### Step 6: Feature-Flagged Control Actions
-- `POST /api/control/actions` is disabled unless `PORTAL_CONTROL_ENABLED=1`.
-- Token check applies if `PORTAL_CONTROL_TOKEN` is configured.
+- `POST /api/control/actions` requires valid control authorization.
+- Preferred mode: login with username/password (`/api/control/auth/login`) and use issued session token.
+- Legacy mode: `PORTAL_CONTROL_ENABLED` and optional `PORTAL_CONTROL_TOKEN`.
 - Supported actions:
   - `refresh_snapshot`: force refresh and optional SSE broadcast.
   - `sample_history`: immediate history sample insert + prune.
@@ -141,6 +142,8 @@ For each session:
 | `/api/portal/status` | GET | collector runtime counters + payload | freshness/latency hints | none |
 | `/api/monitoring/backend` | GET | collector runtime counters + payload | error rate, ages | none |
 | `/api/control/features` | GET | settings | allowed actions/auth-required flags | none |
+| `/api/control/auth/login` | POST | control auth service | session token issue | in-memory auth session create |
+| `/api/control/auth/logout` | POST | control auth service | logout ack | in-memory auth session delete |
 | `/api/control/actions` | POST | settings + collector + history/control services | action-specific response | refresh, history insert, or terminate + refresh |
 | `/api/sessions` | GET | `collector.latest_payload` | none | none |
 | `/api/summary` | GET | `collector.latest_payload.summary` | none | none |
@@ -202,3 +205,4 @@ Use this as a validation checklist:
 - No fixed backend max-session constant exists in portal code; effective ceiling depends on OpenVPN status generation, host resources, and front-end rendering capacity.
 - Geo lookup may be skipped for private/invalid endpoint IPs.
 - `terminate_head_session` acts on ordering from latest parsed snapshot; it is intentionally explicit and simple, not a filtered selector.
+- Control auth sessions are in-memory and process-local (restart clears sessions; multi-worker deployments require shared auth/session storage for consistency).

@@ -271,6 +271,7 @@ def api_control_features(
         return JSONResponse(
             {
                 "enabled": is_authenticated,
+                "control_available": True,
                 "auth_required": True,
                 "auth_mode": "userpass_session",
                 "allowed_actions": settings.control_allowed_actions if is_authenticated else [],
@@ -280,6 +281,7 @@ def api_control_features(
     return JSONResponse(
         {
             "enabled": settings.control_enabled,
+            "control_available": settings.control_enabled,
             "auth_required": bool(settings.control_token),
             "auth_mode": "legacy_token" if settings.control_token else "feature_flag",
             "allowed_actions": settings.control_allowed_actions,

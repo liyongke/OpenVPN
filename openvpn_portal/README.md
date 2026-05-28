@@ -148,6 +148,15 @@ Environment variables:
 - PORTAL_HISTORY_PAYLOAD_MODE default: summary (`summary|full|none`)
 - PORTAL_HISTORY_PAYLOAD_SESSION_CAP default: 50
 
+Control auth defaults:
+- There is no built-in default username/password. Both values default to empty.
+- Session auth mode is enabled only when both `PORTAL_CONTROL_AUTH_USERNAME` and `PORTAL_CONTROL_AUTH_PASSWORD` are set.
+
+Secret storage guidance:
+- Local development: keep control auth credentials in `openvpn_portal/.env` (do not commit).
+- EC2 service mode: keep credentials in deploy-managed `.env.tcp` / `.env.udp` with restricted file permissions.
+- CI/CD: pass credentials through secret references only (for example `${{ secrets.PORTAL_CONTROL_AUTH_USERNAME }}` and `${{ secrets.PORTAL_CONTROL_AUTH_PASSWORD }}`).
+
 ## Notes for your existing deployment
 
 - If your OpenVPN status paths differ, set OPENVPN_STATUS_FILES before start.
