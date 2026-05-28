@@ -338,6 +338,7 @@ jobs:
 
           APP_DIR="${APP_DIR}"
           ARTIFACT_URI="${ARTIFACT_S3_URI}"
+          DEPLOY_AWS_REGION="${AWS_REGION:-ap-southeast-1}"
           UNIT_PATH_TCP="/etc/systemd/system/vpn-portal-tcp.service"
           UNIT_PATH_UDP="/etc/systemd/system/vpn-portal-udp.service"
           TS="$(date +%Y%m%d%H%M%S)"
@@ -436,8 +437,8 @@ jobs:
           PORTAL_TITLE=VPN Portal
           OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
           PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
-          AWS_REGION=${AWS_REGION}
-          PORTAL_CONTROL_AUTH_SECRET_REGION=${AWS_REGION}
+          AWS_REGION=${DEPLOY_AWS_REGION}
+          PORTAL_CONTROL_AUTH_SECRET_REGION=${DEPLOY_AWS_REGION}
           ENV_TCP
           if [[ -n "$AUTH_SECRET_ID" ]]; then
             printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.tcp"
@@ -450,8 +451,8 @@ jobs:
           PORTAL_TITLE=VPN Portal
           OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
           PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
-          AWS_REGION=${AWS_REGION}
-          PORTAL_CONTROL_AUTH_SECRET_REGION=${AWS_REGION}
+          AWS_REGION=${DEPLOY_AWS_REGION}
+          PORTAL_CONTROL_AUTH_SECRET_REGION=${DEPLOY_AWS_REGION}
           ENV_UDP
           if [[ -n "$AUTH_SECRET_ID" ]]; then
             printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.udp"
@@ -554,7 +555,7 @@ jobs:
           aws s3 cp /tmp/deploy_script.sh "$SCRIPT_S3_KEY"
 
           PARAMETERS_JSON="$(cat <<JSON
-          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' PORTAL_CONTROL_AUTH_SECRET_ID='${PORTAL_CONTROL_AUTH_SECRET_ID}' bash /tmp/deploy_openvpn_portal.sh"]}
+          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' PORTAL_CONTROL_AUTH_SECRET_ID='${PORTAL_CONTROL_AUTH_SECRET_ID}' AWS_REGION='${AWS_REGION}' bash /tmp/deploy_openvpn_portal.sh"]}
           JSON
           )"
 
