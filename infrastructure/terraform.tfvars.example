@@ -4,11 +4,25 @@ enable_portal_ingress = true
 portal_ingress_port   = 9443
 portal_admin_cidrs    = ["<your-public-ip>/32"]
 
+# Cost-control defaults
+# Keep true for internet-facing OpenVPN service continuity.
+associate_public_ip_address = true
+
+# Run EC2 daily from 10:00 to 02:00 local time
+enable_instance_schedule   = true
+instance_schedule_timezone = "Asia/Kuala_Lumpur"
+instance_start_hour_local  = 10
+instance_stop_hour_local   = 2
+
 # Optional cost alerts
-# enable_monthly_budget_alert    = true
-# monthly_budget_limit_usd       = 10
-# budget_alert_threshold_percent = 80
-# budget_alert_email             = "you@example.com"
+# enable_monthly_budget_alert                  = true
+# monthly_budget_limit_usd                     = 10
+# budget_alert_threshold_percent               = 80
+# budget_alert_additional_threshold_percent    = [100, 120]
+# budget_alert_email                           = "you@example.com"
+# enable_cost_anomaly_detection                = true
+# cost_anomaly_alert_email                     = "you@example.com"
+# cost_anomaly_threshold_usd                   = 3
 
 # Portal control auth secret (recommended)
 # enable_portal_auth_secret = true

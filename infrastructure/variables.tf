@@ -16,6 +16,36 @@ variable "instance_type" {
   default     = "t2.micro" # Free tier eligible
 }
 
+variable "associate_public_ip_address" {
+  description = "Whether to associate a public IPv4 address to the OpenVPN EC2 instance"
+  type        = bool
+  default     = false
+}
+
+variable "enable_instance_schedule" {
+  description = "Enable daily EC2 start/stop scheduling for the OpenVPN server"
+  type        = bool
+  default     = false
+}
+
+variable "instance_schedule_timezone" {
+  description = "IANA timezone used by EventBridge Scheduler for EC2 start/stop"
+  type        = string
+  default     = "Asia/Kuala_Lumpur"
+}
+
+variable "instance_start_hour_local" {
+  description = "Local hour (0-23) to start EC2 instance daily"
+  type        = number
+  default     = 10
+}
+
+variable "instance_stop_hour_local" {
+  description = "Local hour (0-23) to stop EC2 instance daily"
+  type        = number
+  default     = 0
+}
+
 variable "enable_vpc_flow_logs" {
   description = "Enable VPC Flow Logs for the OpenVPN VPC"
   type        = bool
@@ -50,6 +80,30 @@ variable "budget_alert_email" {
   description = "Email address to receive budget alerts (required when enable_monthly_budget_alert=true)"
   type        = string
   default     = ""
+}
+
+variable "budget_alert_additional_threshold_percent" {
+  description = "Additional ACTUAL alert thresholds (%) for monthly budget notifications"
+  type        = list(number)
+  default     = [120]
+}
+
+variable "enable_cost_anomaly_detection" {
+  description = "Enable AWS Cost Anomaly Detection email alerts"
+  type        = bool
+  default     = true
+}
+
+variable "cost_anomaly_alert_email" {
+  description = "Email address to receive cost anomaly alerts (required when enable_cost_anomaly_detection=true)"
+  type        = string
+  default     = ""
+}
+
+variable "cost_anomaly_threshold_usd" {
+  description = "Minimum absolute anomaly impact (USD) to trigger alert emails"
+  type        = number
+  default     = 3
 }
 
 variable "enable_portal_ingress" {

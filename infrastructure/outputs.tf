@@ -25,17 +25,17 @@ output "github_actions_oidc_provider_arn" {
 
 output "openvpn_connect_hint" {
   description = "Quick OpenVPN endpoint hint"
-  value       = "OpenVPN endpoint: ${aws_instance.openvpn_server.public_ip}:443 (udp primary, tcp fallback)"
+  value       = var.associate_public_ip_address ? "OpenVPN endpoint: ${aws_instance.openvpn_server.public_ip}:443 (udp primary, tcp fallback)" : "No public endpoint (associate_public_ip_address=false). Use private networking or attach a public endpoint strategy."
 }
 
 output "openvpn_udp_endpoint" {
   description = "OpenVPN UDP endpoint"
-  value       = "${aws_instance.openvpn_server.public_ip}:443/udp"
+  value       = var.associate_public_ip_address ? "${aws_instance.openvpn_server.public_ip}:443/udp" : null
 }
 
 output "openvpn_tcp_endpoint" {
   description = "OpenVPN TCP endpoint"
-  value       = "${aws_instance.openvpn_server.public_ip}:443/tcp"
+  value       = var.associate_public_ip_address ? "${aws_instance.openvpn_server.public_ip}:443/tcp" : null
 }
 
 output "vpc_flow_log_group_name" {
@@ -51,6 +51,21 @@ output "vpc_flow_log_id" {
 output "budget_alert_name" {
   description = "Budget alert resource name (if enabled)"
   value       = var.enable_monthly_budget_alert && var.budget_alert_email != "" ? aws_budgets_budget.monthly_cost_budget[0].name : null
+}
+
+output "openvpn_start_schedule_name" {
+  description = "EventBridge Scheduler rule name for instance daily start"
+  value       = var.enable_instance_schedule ? aws_scheduler_schedule.openvpn_start[0].name : null
+}
+
+output "openvpn_stop_schedule_name" {
+  description = "EventBridge Scheduler rule name for instance daily stop"
+  value       = var.enable_instance_schedule ? aws_scheduler_schedule.openvpn_stop[0].name : null
+}
+
+output "cost_anomaly_monitor_arn" {
+  description = "Cost anomaly monitor ARN (if enabled)"
+  value       = var.enable_cost_anomaly_detection && var.cost_anomaly_alert_email != "" ? aws_ce_anomaly_monitor.openvpn_cost_monitor[0].arn : null
 }
 
 output "portal_admin_url" {

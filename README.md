@@ -72,6 +72,20 @@ terraform -chdir=infrastructure apply
 
 Backend settings live in [infrastructure/backend.hcl](infrastructure/backend.hcl).
 
+### Cost Guardrails (Terraform)
+
+The infrastructure supports cost controls that can be enabled in `infrastructure/terraform.tfvars`:
+
+- EC2 schedule window (`10:00` to `02:00` local timezone) via EventBridge Scheduler.
+- Public IPv4 control switch (`associate_public_ip_address`), keep `true` for internet-facing OpenVPN.
+- Monthly budget alerts (`enable_monthly_budget_alert`, budget thresholds, email).
+- Cost anomaly alerts (`enable_cost_anomaly_detection`, email, impact threshold).
+
+Important behavior:
+
+- If public IPv4 is disabled, direct internet OpenVPN endpoint access is removed.
+- Budget and anomaly alert resources are created only when alert email fields are set.
+
 ## GitHub Actions CI/CD
 
 Workflow: `.github/workflows/deploy-openvpn.yml`

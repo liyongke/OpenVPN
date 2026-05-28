@@ -481,7 +481,7 @@ resource "aws_instance" "openvpn_server" {
   source_dest_check           = false
   subnet_id                   = aws_subnet.vpn_subnet.id
   vpc_security_group_ids      = [aws_security_group.vpn_sg.id]
-  associate_public_ip_address = true
+  associate_public_ip_address = var.associate_public_ip_address
   iam_instance_profile        = aws_iam_instance_profile.openvpn_instance_profile.name
 
   # OpenVPN is managed by openvpn_setup.sh and systemd on the running host.
@@ -499,6 +499,95 @@ resource "aws_instance" "openvpn_server" {
   tags = {
     Name = "OpenVPN-Server"
   }
+}
+
+resource "aws_iam_role" "ec2_scheduler_role" {
+  count = var.enable_instance_schedule ? 1 : 0
+  name  = "openvpn-ec2-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "scheduler.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ec2_scheduler_policy" {
+  count = var.enable_instance_schedule ? 1 : 0
+  name  = "openvpn-ec2-scheduler-policy"
+  role  = aws_iam_role.ec2_scheduler_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:StartInstances",
+          "ec2:StopInstances",
+          "ec2:DescribeInstances"
+        ]
+        Resource = [
+          aws_instance.openvpn_server.arn
+        ]
+      }
+    ]
+  })
+}
+
+# Start instance at local 10:00 daily.
+resource "aws_scheduler_schedule" "openvpn_start" {
+  count                        = var.enable_instance_schedule ? 1 : 0
+  name                         = "openvpn-start-daily"
+  schedule_expression          = "cron(0 ${var.instance_start_hour_local} * * ? *)"
+  schedule_expression_timezone = var.instance_schedule_timezone
+  state                        = "ENABLED"
+  group_name                   = "default"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:startInstances"
+    role_arn = aws_iam_role.ec2_scheduler_role[0].arn
+    input = jsonencode({
+      InstanceIds = [aws_instance.openvpn_server.id]
+    })
+  }
+
+  depends_on = [aws_iam_role_policy.ec2_scheduler_policy]
+}
+
+# Stop instance at configured local stop hour daily (end of service window).
+resource "aws_scheduler_schedule" "openvpn_stop" {
+  count                        = var.enable_instance_schedule ? 1 : 0
+  name                         = "openvpn-stop-daily"
+  schedule_expression          = "cron(0 ${var.instance_stop_hour_local} * * ? *)"
+  schedule_expression_timezone = var.instance_schedule_timezone
+  state                        = "ENABLED"
+  group_name                   = "default"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:stopInstances"
+    role_arn = aws_iam_role.ec2_scheduler_role[0].arn
+    input = jsonencode({
+      InstanceIds = [aws_instance.openvpn_server.id]
+    })
+  }
+
+  depends_on = [aws_iam_role_policy.ec2_scheduler_policy]
 }
 
 # Optional monthly budget alert for quick cost visibility
@@ -530,5 +619,45 @@ resource "aws_budgets_budget" "monthly_cost_budget" {
     threshold_type             = "PERCENTAGE"
     notification_type          = "ACTUAL"
     subscriber_email_addresses = [var.budget_alert_email]
+  }
+
+  dynamic "notification" {
+    for_each = var.budget_alert_additional_threshold_percent
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.budget_alert_email]
+    }
+  }
+}
+
+resource "aws_ce_anomaly_monitor" "openvpn_cost_monitor" {
+  count             = var.enable_cost_anomaly_detection && var.cost_anomaly_alert_email != "" ? 1 : 0
+  name              = "openvpn-service-anomaly-monitor"
+  monitor_type      = "DIMENSIONAL"
+  monitor_dimension = "SERVICE"
+}
+
+resource "aws_ce_anomaly_subscription" "openvpn_cost_subscription" {
+  count     = var.enable_cost_anomaly_detection && var.cost_anomaly_alert_email != "" ? 1 : 0
+  name      = "openvpn-cost-anomaly-subscription"
+  frequency = "DAILY"
+
+  monitor_arn_list = [aws_ce_anomaly_monitor.openvpn_cost_monitor[0].arn]
+  subscriber {
+    type    = "EMAIL"
+    address = var.cost_anomaly_alert_email
+  }
+
+  threshold_expression {
+    and {
+      dimension {
+        key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
+        match_options = ["GREATER_THAN_OR_EQUAL"]
+        values        = [tostring(var.cost_anomaly_threshold_usd)]
+      }
+    }
   }
 }

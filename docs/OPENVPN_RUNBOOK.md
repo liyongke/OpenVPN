@@ -721,6 +721,43 @@ aws ssm send-command \
 - Keep client-connect hook enabled in both configs when device labels are required.
 - Treat bash -n checks as mandatory before deploying setup or hook scripts.
 
+### Cost Guardrails and Cleanup
+
+Terraform cost controls (in `infrastructure/terraform.tfvars`):
+
+- `enable_instance_schedule=true`
+- `instance_start_hour_local=10`
+- `instance_stop_hour_local=2`
+- `associate_public_ip_address=true` (keep internet-facing OpenVPN endpoint)
+- `enable_monthly_budget_alert=true` (requires `budget_alert_email`)
+- `enable_cost_anomaly_detection=true` (requires `cost_anomaly_alert_email`)
+
+Apply flow:
+
+```bash
+terraform -chdir=infrastructure plan
+terraform -chdir=infrastructure apply
+```
+
+Cleanup audit (dry-run by default):
+
+```bash
+bash scripts/aws_cost_cleanup_audit.sh
+```
+
+Cleanup apply (destructive):
+
+```bash
+bash scripts/aws_cost_cleanup_audit.sh --apply --region ap-southeast-1 --snapshot-days 30
+```
+
+Expected dry-run output:
+
+- Lists unassociated Elastic IP allocation IDs.
+- Lists unattached EBS volume IDs.
+- Lists self-owned snapshots older than cutoff days.
+- Prints no-change summary unless `--apply` is supplied.
+
 ---
 
 ## 14. AI Skills Prompt Bank
