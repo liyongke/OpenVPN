@@ -16,7 +16,8 @@ const DEFAULT_FEATURES = {
   enabled: false,
   control_available: false,
   auth_required: true,
-  auth_mode: "feature_flag",
+  auth_mode: "secret_session",
+  config_error: "",
   allowed_actions: [],
 };
 
@@ -203,8 +204,11 @@ export function ControlPage() {
   };
 
   const login = async () => {
-    if (features.auth_mode !== "userpass_session") {
-      setAuthMessage("Username/password auth is not enabled in this environment. Use the Control Token field.");
+    if (features.auth_mode !== "secret_session") {
+      setAuthMessage(
+        features.config_error ||
+          "Control auth is not configured. Set PORTAL_CONTROL_AUTH_SECRET_ID and configure secret credentials.",
+      );
       return;
     }
     setAuthBusy(true);
@@ -242,19 +246,23 @@ export function ControlPage() {
     }
   };
 
-  const showAuthOptional = !features.auth_required && features.auth_mode !== "userpass_session";
-  const canUseSessionAuth = features.auth_mode === "userpass_session";
+  const canUseSessionAuth = features.auth_mode === "secret_session";
   const isUnlocked = Boolean(features.enabled);
-  const operationsState =
-    features.enabled ? "enabled" : features.control_available && features.auth_required ? "locked" : "disabled";
+  const operationsState = !features.control_available ? "unconfigured" : features.enabled ? "enabled" : "locked";
   const canSubmitAuth = canUseSessionAuth && !authBusy && authUsername.trim() && authPassword;
 
   return (
     <section className="panel control-placeholder">
       <div className="control-header">
         <div>
-          <p className="eyebrow">Administrative Surface</p>
-          <h2>Operations Center</h2>
+          <div className="brand-title">
+            <svg className="brand-icon page-brand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M13.9 2.6a1 1 0 0 0-1.8 0l-.5 1.2a7.8 7.8 0 0 0-1.7.7L8.7 3.8a1 1 0 0 0-1.3.2L5.9 5.5a1 1 0 0 0-.2 1.3l.7 1.2a7.8 7.8 0 0 0-.7 1.7l-1.2.5a1 1 0 0 0 0 1.8l1.2.5c.1.6.4 1.2.7 1.7l-.7 1.2a1 1 0 0 0 .2 1.3l1.5 1.5a1 1 0 0 0 1.3.2l1.2-.7c.6.3 1.1.5 1.7.7l.5 1.2a1 1 0 0 0 1.8 0l.5-1.2c.6-.1 1.2-.4 1.7-.7l1.2.7a1 1 0 0 0 1.3-.2l1.5-1.5a1 1 0 0 0 .2-1.3l-.7-1.2c.3-.6.5-1.1.7-1.7l1.2-.5a1 1 0 0 0 0-1.8l-1.2-.5a7.8 7.8 0 0 0-.7-1.7l.7-1.2a1 1 0 0 0-.2-1.3L16.6 4a1 1 0 0 0-1.3-.2l-1.2.7a7.8 7.8 0 0 0-1.7-.7l-.5-1.2zM13 8.5a2.5 2.5 0 1 1-2 4.6 2.5 2.5 0 0 1 2-4.6z" />
+            </svg>
+            <div>
+              <h2>Operations Center</h2>
+            </div>
+          </div>
         </div>
         <div className="chip-row control-header-chips" aria-label="Operations status summary">
           <span className="chip">
@@ -276,12 +284,14 @@ export function ControlPage() {
         >
           {isUnlocked ? "🔓" : "🔒"}
         </button>
-        <p className="sub control-sub-full">Feature-flagged operations require authentication and are disabled by default.</p>
       </div>
 
       <div className="control-grid">
         <article className="control-card">
-          <h3>Backend Monitoring</h3>
+          <div className="section-title-help">
+            <h3>Backend Monitoring</h3>
+            <span className="help-tip" title="Collector health, refresh cadence, and error rates.">?</span>
+          </div>
           <div className="chip-row monitor-chip-row" aria-label="Backend collector monitoring">
             <span className="chip">
               Poll <strong>{monitoring.live_poll_seconds}s</strong>
@@ -305,13 +315,16 @@ export function ControlPage() {
           {monitoring.last_refresh_error ? (
             <p className="control-result control-result-error">Last collector error: {monitoring.last_refresh_error}</p>
           ) : (
-            <p className="hint">Collector loop healthy. No recent refresh error reported.</p>
+            <p className="hint">Healthy.</p>
           )}
           {monitoringError ? <p className="control-result control-result-error">{monitoringError}</p> : null}
         </article>
 
         <article className="control-card">
-          <h3>Actions</h3>
+          <div className="section-title-help">
+            <h3>Actions</h3>
+            <span className="help-tip" title="Manual control operations. Login required.">?</span>
+          </div>
           <div className="control-actions">
             <button
               type="button"
@@ -340,26 +353,31 @@ export function ControlPage() {
           </div>
           {!features.enabled ? (
             <p className="hint">
-              {showAuthOptional ? "Control API is in legacy mode and currently disabled by backend feature flag." : "Use the lock icon to authenticate and unlock control actions."}
+              {features.control_available
+                ? "Locked."
+                : "Control auth unavailable."}
             </p>
           ) : null}
           {result ? <p className="control-result">{result}</p> : null}
         </article>
 
         <article className="control-card control-access-card">
-          <h3>Access & Session</h3>
+          <div className="section-title-help">
+            <h3>Access & Session</h3>
+            <span className="help-tip" title="Current auth mode and session token state.">?</span>
+          </div>
           <div className="chip-row monitor-chip-row" aria-label="Control authentication state">
             <span className="chip">
-              Mode <strong>{canUseSessionAuth ? "user/pass session" : features.auth_mode || "legacy"}</strong>
+              Mode <strong>{features.auth_mode || "secret_session"}</strong>
             </span>
             <span className="chip">
               Session <strong>{controlToken.trim() ? "present" : "empty"}</strong>
             </span>
           </div>
           <p className="hint">
-            {canUseSessionAuth
-              ? "Use the lock icon to sign in. Session token is filled automatically and can be cleared here."
-              : "This environment uses legacy or feature-flag mode. Paste a control token here only when needed."}
+            {features.control_available
+              ? "Use lock to sign in."
+              : "Control auth unavailable."}
           </p>
           <div className="control-token-panel" aria-label="Control token section">
             <div className="control-token-panel-head">
@@ -369,7 +387,7 @@ export function ControlPage() {
               <button
                 type="button"
                 className="control-button control-token-clear"
-                disabled={!controlToken.trim()}
+                disabled={authBusy || !controlToken.trim()}
                 onClick={logout}
               >
                 Clear
@@ -380,7 +398,7 @@ export function ControlPage() {
               className="control-input"
               type="password"
               autoComplete="off"
-              placeholder="Paste session token or legacy token"
+              placeholder="Session token issued after login"
               value={controlToken}
               onChange={(event) => setControlToken(event.target.value)}
             />
@@ -388,7 +406,10 @@ export function ControlPage() {
         </article>
 
         <article className="control-card map-card map-card-bottom">
-          <h3>Session Geo Map</h3>
+          <div className="section-title-help">
+            <h3>Session Geo Map</h3>
+            <span className="help-tip" title="Approximate geo view from public endpoint IP addresses.">?</span>
+          </div>
           <div className="chip-row monitor-chip-row" aria-label="Session map summary">
             <span className="chip">
               Sessions <strong>{mapData.session_total || 0}</strong>
@@ -455,7 +476,6 @@ export function ControlPage() {
           )}
 
           {mapError ? <p className="control-result control-result-error">{mapError}</p> : null}
-          <p className="hint">Hover markers for quick geo session details. Location is IP-based and approximate.</p>
         </article>
       </div>
 
@@ -522,18 +542,9 @@ export function ControlPage() {
             ) : (
               <>
                 <p className="hint">
-                  Username/password auth is not configured on this backend. Use the Control Token field in Access & Session when running legacy mode.
+                  {features.config_error ||
+                    "Control auth is not configured. Set PORTAL_CONTROL_AUTH_SECRET_ID and add username plus password_hash in AWS Secrets Manager."}
                 </p>
-                <div className="control-auth-actions">
-                  <button
-                    type="button"
-                    className="control-button"
-                    disabled={authBusy || !controlToken.trim()}
-                    onClick={logout}
-                  >
-                    Lock
-                  </button>
-                </div>
               </>
             )}
             {authMessage ? <p className="control-result">{authMessage}</p> : null}

@@ -1,4 +1,4 @@
-# VPN Portal Phase 2 (Read-Only Ops)
+# OpenVPN Portal (Read-Only Ops)
 
 This folder contains an isolated portal MVP that does not modify OpenVPN service state.
 
@@ -44,12 +44,12 @@ Reference: [../docs/diagrams/openvpn-portal-backend-data-mechanism.svg](../docs/
 - Live auto-refresh dashboard updates using server-sent events (SSE).
 - Built-in daily history for the last 7 days (SQLite-backed snapshots).
 - Status Source panel shows configured status files once, with per-source protocol/session details and links to the status viewer.
-- Status Explorer supports per-source inline log expand/collapse and keeps an optional collapsed full raw view for quick copy/audit.
+- Status Explorer supports per-source inline log expand/collapse and exposes a compact incident tips view for quick audit checks.
 - Per-session protocol (TCP/UDP) and device hints (phone/pc/unknown).
 - Per-session audit classification with flags (for example `unidentified`, `zero_traffic`).
 - History panel is placed at the bottom of the dashboard for cleaner top-level monitoring.
 - Operations Center places backend monitoring first, then a full-width Session Geo Map, followed by credentials and actions.
-- SPA and backend pages both use the canonical icon endpoint `/static/openvpn-icon.svg`.
+- The sidebar uses the canonical icon endpoint `/static/openvpn-icon.svg`; page headers use route-specific inline icons.
 
 Device identification note:
 - OpenVPN status files do not include a reliable phone/pc field by default.
@@ -69,8 +69,8 @@ Audit/stability note:
 
 Control API scope note:
 - Optional control actions include `refresh_snapshot`, `sample_history`, and `terminate_head_session`.
-- Preferred enablement is username/password login to issue a short-lived control session token.
-- Legacy feature-flag/token mode remains available when control auth credentials are not configured.
+- Control actions require username/password login and issue a short-lived control session token.
+- The control auth backend must be configured through `PORTAL_CONTROL_AUTH_SECRET_ID` (AWS Secrets Manager).
 - `terminate_head_session` targets the first row in Active Sessions and requires either:
    - OpenVPN management sockets (`PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET` / `PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET`), or
    - a custom terminate command via `PORTAL_CONTROL_TERMINATE_COMMAND`.
@@ -133,13 +133,13 @@ Environment variables:
 - PORTAL_LIVE_POLL_SECONDS default: 1.0
 - PORTAL_DEVICE_HINTS_FILE default: /var/log/openvpn/device_hints.json
 - PORTAL_GEOIP_DB_PATH default: empty (when set, use local GeoLite2 DB first and fall back to ipwho.is)
-- PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
+- PORTAL_TITLE default: OpenVPN Portal (Read-Only Ops)
 - PORTAL_CONTROL_ALLOWED_ACTIONS default: refresh_snapshot,sample_history,terminate_head_session
-- PORTAL_CONTROL_AUTH_USERNAME default: empty (env fallback when secret-backed auth is not used)
-- PORTAL_CONTROL_AUTH_PASSWORD default: empty
-- PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (preferred; format `pbkdf2_sha256$iterations$salt_b64$digest_b64`)
-- PORTAL_CONTROL_AUTH_SECRET_ID default: empty (when set, auth credentials are loaded from AWS Secrets Manager)
-- PORTAL_CONTROL_AUTH_SECRET_REGION default: empty (optional region override for secret lookup)
+- PORTAL_CONTROL_AUTH_USERNAME default: empty (ignored in strict secret-backed mode)
+- PORTAL_CONTROL_AUTH_PASSWORD default: empty (ignored in strict secret-backed mode)
+- PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (ignored in strict secret-backed mode)
+- PORTAL_CONTROL_AUTH_SECRET_ID default: openvpn/portal/control-auth
+- PORTAL_CONTROL_AUTH_SECRET_REGION default: AWS_REGION (optional explicit override for secret lookup)
 - PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS default: 3600
 - PORTAL_CONTROL_AUTH_MAX_SESSIONS default: 256
 - PORTAL_CONTROL_AUTH_MAX_FAILED_ATTEMPTS default: 5
@@ -156,9 +156,9 @@ Environment variables:
 
 Control auth defaults:
 - There is no built-in default username/password. Both values default to empty.
-- Session auth mode is enabled when username plus password or password-hash are available, either from env vars or from the configured secret.
+- Session auth mode is enabled when the configured secret contains username plus password or password-hash.
 - Hash mode is preferred over plaintext password mode.
-- If `PORTAL_CONTROL_AUTH_SECRET_ID` is set, secret values override auth username/password/password-hash env vars.
+- Secret values are treated as the authority for control auth credentials.
 
 Secret storage guidance:
 - Local development: keep control auth credentials in `openvpn_portal/.env` (do not commit).
@@ -167,7 +167,7 @@ Secret storage guidance:
 - Recommended production mode: set `PORTAL_CONTROL_AUTH_SECRET_ID` and store auth payload in AWS Secrets Manager JSON:
    - `username`
    - `password_hash` (preferred)
-   - `password` (legacy fallback)
+   - `password` (optional plaintext fallback)
 
 Recommended secret JSON:
 

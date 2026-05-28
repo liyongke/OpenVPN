@@ -165,25 +165,25 @@ def load_settings() -> Settings:
         os.getenv("PORTAL_CONTROL_ALLOWED_ACTIONS", "refresh_snapshot,sample_history,terminate_head_session")
     )
 
-    control_auth_username = os.getenv("PORTAL_CONTROL_AUTH_USERNAME", "").strip()
-    control_auth_password = os.getenv("PORTAL_CONTROL_AUTH_PASSWORD", "")
-    control_auth_password_hash = os.getenv("PORTAL_CONTROL_AUTH_PASSWORD_HASH", "").strip()
-    control_auth_secret_id = os.getenv("PORTAL_CONTROL_AUTH_SECRET_ID", "").strip()
-    control_auth_secret_region = os.getenv("PORTAL_CONTROL_AUTH_SECRET_REGION", "").strip()
+    control_auth_username = ""
+    control_auth_password = ""
+    control_auth_password_hash = ""
+    control_auth_secret_id = os.getenv("PORTAL_CONTROL_AUTH_SECRET_ID", "openvpn/portal/control-auth").strip()
+    control_auth_secret_region = os.getenv(
+        "PORTAL_CONTROL_AUTH_SECRET_REGION", os.getenv("AWS_REGION", "")
+    ).strip()
 
-    if control_auth_secret_id:
-        secret_values = _load_control_auth_secret(control_auth_secret_id, control_auth_secret_region)
-        if secret_values.get("username"):
-            control_auth_username = secret_values["username"]
-        if secret_values.get("password"):
-            control_auth_password = secret_values["password"]
-        if secret_values.get("password_hash"):
-            control_auth_password_hash = secret_values["password_hash"]
+    # Control auth is secret-first by default; env user/password values are intentionally
+    # ignored to keep one canonical credential source.
+    secret_values = _load_control_auth_secret(control_auth_secret_id, control_auth_secret_region)
+    control_auth_username = secret_values.get("username", "")
+    control_auth_password = secret_values.get("password", "")
+    control_auth_password_hash = secret_values.get("password_hash", "")
 
     return Settings(
         host=os.getenv("PORTAL_HOST", "0.0.0.0"),
         port=int(os.getenv("PORTAL_PORT", "8088")),
-        title=os.getenv("PORTAL_TITLE", "OpenVPN Portal Phase 2 (Read-Only Ops)"),
+        title=os.getenv("PORTAL_TITLE", "OpenVPN Portal (Read-Only Ops)"),
         status_files=status_files,
         status_file=status_files[0] if status_files else _detect_status_file(),
         log_file=os.getenv("OPENVPN_LOG_FILE", "/var/log/openvpn/openvpn.log"),

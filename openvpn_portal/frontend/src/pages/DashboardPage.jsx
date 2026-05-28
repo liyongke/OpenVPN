@@ -9,8 +9,6 @@ import {
   subscribeLiveSessions,
 } from "../api/client";
 
-const portalIconUrl = "/static/openvpn-icon.svg";
-
 const EMPTY_SNAPSHOT = {
   summary: {
     active_clients: 0,
@@ -40,12 +38,14 @@ const EMPTY_CONTROL_FEATURES = {
   enabled: false,
   control_available: false,
   auth_required: true,
+  auth_mode: "secret_session",
+  config_error: "",
   allowed_actions: [],
 };
 
 function HistoryChart({ days }) {
   if (!days.length) {
-    return <p className="chart-empty">No chart data yet. Samples appear every minute.</p>;
+    return <p className="chart-empty">No data.</p>;
   }
 
   const ordered = [...days].sort((a, b) => String(a.day).localeCompare(String(b.day)));
@@ -122,10 +122,10 @@ function HistoryChart({ days }) {
       </svg>
       <div className="hist-legend">
         <span>
-          <i className="legend-swatch bar" /> Daily max traffic snapshot (MiB)
+          <i className="legend-swatch bar" /> Traffic
         </span>
         <span>
-          <i className="legend-swatch line" /> Daily peak trusted sessions
+          <i className="legend-swatch line" /> Trusted peak
         </span>
       </div>
     </>
@@ -286,6 +286,7 @@ export function DashboardPage() {
   const historyLatest = historyDays.length
     ? historyDays[historyDays.length - 1].last_sampled_at || historyDays[historyDays.length - 1].day || "n/a"
     : "n/a";
+  const historyLatestShort = String(historyLatest).replace("T", " ").replace("Z", "").slice(0, 19) || "n/a";
 
   const protocol = summary.protocol_breakdown || { tcp: 0, udp: 0 };
   const devices = summary.trusted_device_breakdown || summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
@@ -294,6 +295,29 @@ export function DashboardPage() {
   const duplicatePreview = Array.isArray(diagnostics.cross_protocol_duplicates)
     ? diagnostics.cross_protocol_duplicates.slice(0, 3)
     : [];
+  const trustedDeviceTotal = Math.max(0, Number(devices.phone || 0) + Number(devices.pc || 0) + Number(devices.unknown || 0));
+  const deviceDistribution = [
+    {
+      key: "phone",
+      label: "Phone",
+      value: Number(devices.phone || 0),
+      pct: trustedDeviceTotal > 0 ? Math.round((Number(devices.phone || 0) / trustedDeviceTotal) * 100) : 0,
+    },
+    {
+      key: "pc",
+      label: "PC",
+      value: Number(devices.pc || 0),
+      pct: trustedDeviceTotal > 0 ? Math.round((Number(devices.pc || 0) / trustedDeviceTotal) * 100) : 0,
+    },
+    {
+      key: "unknown",
+      label: "Unknown",
+      value: Number(devices.unknown || 0),
+      pct: trustedDeviceTotal > 0 ? Math.round((Number(devices.unknown || 0) / trustedDeviceTotal) * 100) : 0,
+    },
+  ];
+  const duplicateRatioBase = Math.max(1, trustedIdentities || Number(summary.trusted_active_clients || 0));
+  const duplicateRatioPct = Math.min(100, Math.round((duplicateCount / duplicateRatioBase) * 100));
   const allowedActions = new Set(controlFeatures.allowed_actions || []);
   const canTerminateSession = Boolean(controlFeatures.enabled) && allowedActions.has("terminate_head_session");
 
@@ -334,17 +358,17 @@ export function DashboardPage() {
       <header className="top hero">
         <div className="brand-row">
           <div className="brand-title">
-            <img className="brand-icon" src={portalIconUrl} alt="OpenVPN icon" />
+              <svg className="brand-icon page-brand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4zm0 10a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-7zm10-10a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1V4zm0 10a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7z" />
+              </svg>
             <div>
-              <p className="eyebrow">OpenVPN Ops Portal</p>
-              <h1>Live VPN Dashboard</h1>
+              <h1>Dashboard</h1>
             </div>
           </div>
           <div className="live-pill" aria-label="Live stream enabled">
             Live stream enabled
           </div>
         </div>
-        <p className="sub">Observability-first surface. Row termination unlocks after a successful control login.</p>
         <div className="hero-meta">
           <span>
             Updated: <strong>{snapshot.updated_at || "n/a"}</strong>
@@ -359,104 +383,135 @@ export function DashboardPage() {
       </header>
 
       <section className="cards cards-main" aria-label="Primary metrics">
-        <article className="card metric-card">
-          <h2>Active Sessions</h2>
-          <p className="metric">{summary.active_clients || 0}</p>
-          <p className="metric-foot">Raw status sessions</p>
+        <article className="card summary-card sessions-overview">
+          <h2>Sessions</h2>
+          <div className="summary-list" aria-label="Session summary">
+            <div className="summary-row">
+              <span className="summary-icon active" aria-hidden="true" />
+              <span className="summary-label">Active</span>
+              <strong className="summary-value">{summary.active_clients || 0}</strong>
+            </div>
+            <div className="summary-row">
+              <span className="summary-icon trusted" aria-hidden="true" />
+              <span className="summary-label">Trusted</span>
+              <strong className="summary-value">{summary.trusted_active_clients ?? summary.active_clients ?? 0}</strong>
+            </div>
+            <div className="summary-row">
+              <span className="summary-icon suspect" aria-hidden="true" />
+              <span className="summary-label">Suspect</span>
+              <strong className="summary-value">{summary.suspect_active_clients ?? 0}</strong>
+            </div>
+          </div>
         </article>
-        <article className="card metric-card trusted">
-          <h2>Trusted Sessions</h2>
-          <p className="metric">{summary.trusted_active_clients ?? summary.active_clients ?? 0}</p>
-          <p className="metric-foot">Identity validated</p>
-        </article>
-        <article className="card metric-card suspect">
-          <h2>Suspect Sessions</h2>
-          <p className="metric">{summary.suspect_active_clients ?? 0}</p>
-          <p className="metric-foot">Needs review</p>
-        </article>
-        <article className="card metric-card traffic">
-          <h2>Total Download</h2>
-          <p className="metric">{summary.total_mib_received || 0} MiB</p>
-          <p className="metric-foot">Current snapshot</p>
-        </article>
-        <article className="card metric-card traffic">
-          <h2>Total Upload</h2>
-          <p className="metric">{summary.total_mib_sent || 0} MiB</p>
-          <p className="metric-foot">Current snapshot</p>
-        </article>
-        <article className="card metric-card mix">
+        <article className="card summary-card transport-overview">
           <h2>Transport</h2>
-          <p className="metric small">TCP {protocol.tcp || 0} / UDP {protocol.udp || 0}</p>
-          <p className="metric-foot">Connection split</p>
+          <div className="summary-list" aria-label="Transport summary">
+            <div className="summary-row">
+              <span className="summary-icon download" aria-hidden="true" />
+              <span className="summary-label">Download</span>
+              <strong className="summary-value">{summary.total_mib_received || 0} MiB</strong>
+            </div>
+            <div className="summary-row">
+              <span className="summary-icon upload" aria-hidden="true" />
+              <span className="summary-label">Upload</span>
+              <strong className="summary-value">{summary.total_mib_sent || 0} MiB</strong>
+            </div>
+            <div className="summary-row">
+              <span className="summary-icon split" aria-hidden="true" />
+              <span className="summary-label">Split</span>
+              <strong className="summary-value">TCP {protocol.tcp || 0} / UDP {protocol.udp || 0}</strong>
+            </div>
+          </div>
+        </article>
+        <article className="card summary-card devices-overview">
+          <div className="card-head">
+            <h2>Device Mix (Trusted)</h2>
+            <span className="help-tip" title="Trusted-only device composition from current snapshot.">?</span>
+          </div>
+          <div className="summary-list" aria-label="Trusted device summary">
+            {deviceDistribution.map((item) => (
+              <div className="summary-row" key={`top-${item.key}`}>
+                <span className={`summary-icon ${item.key}`} aria-hidden="true" />
+                <span className="summary-label">{item.label}</span>
+                <strong className="summary-value">{item.value}</strong>
+              </div>
+            ))}
+          </div>
         </article>
       </section>
 
-      <section className="cards cards-sub">
-        <article className="card">
-          <h2>Device Mix (Trusted)</h2>
-          <p className="metric small">
-            Phone {devices.phone || 0} / PC {devices.pc || 0} / Unknown {devices.unknown || 0}
-          </p>
-          <p className="hint">
-            Trusted sessions exclude clearly unauthenticated/noise entries. Raw device counts remain available via API
-            summary.
-          </p>
-        </article>
-        <article className="card">
-          <h2>Cross-Protocol Duplicates</h2>
-          <p className="metric small">{duplicateCount}</p>
-          <p className="hint">Same identity currently active on both TCP and UDP daemons.</p>
-          {duplicatePreview.length ? (
-            <p className="source-meta">
-              {duplicatePreview
-                .map((item) => `${item.identity} [${(item.protocols || []).join("/")}]`)
-                .join(" | ")}
-            </p>
-          ) : null}
-        </article>
-        <article className="card coverage-card">
-          <h2>Trusted Identity Coverage</h2>
-          <div className="coverage-header">
-            <p className="coverage-kicker">Audit baseline for stable identities versus changing endpoints</p>
+      <section className="panel section-panel aggregate-card" aria-label="Identity analytics">
+          <div className="aggregate-head">
+            <div className="card-head">
+              <h2>Coverage &amp; Duplicate Integrity</h2>
+              <span className="help-tip" title="Aggregates trusted endpoint coverage and cross-protocol identity duplication.">?</span>
+            </div>
             <span className="coverage-badge">{trustShare}% trust share</span>
           </div>
-          <div className="coverage-grid">
-            <div className="coverage-stat">
-              <span className="coverage-stat-value">{trustedIdentities}</span>
-              <span className="coverage-stat-label">Trusted identities</span>
+
+          <div className="aggregate-grid">
+            <div className="aggregate-coverage">
+              <div className="section-title-help">
+                <h3>Trusted Identity Coverage</h3>
+                <span className="help-tip" title="Trusted identity and endpoint concentration versus raw endpoint surface.">?</span>
+              </div>
+              <div className="coverage-grid">
+                <div className="coverage-stat">
+                  <span className="coverage-stat-value">{trustedIdentities}</span>
+                  <span className="coverage-stat-label">Trusted identities</span>
+                </div>
+                <div className="coverage-stat">
+                  <span className="coverage-stat-value">{trustedEndpoints}</span>
+                  <span className="coverage-stat-label">Trusted endpoints</span>
+                </div>
+                <div className="coverage-stat">
+                  <span className="coverage-stat-value">{rawEndpoints}</span>
+                  <span className="coverage-stat-label">Raw endpoints</span>
+                </div>
+              </div>
+              <div className="coverage-bar" aria-hidden="true">
+                <span className="coverage-bar-fill" style={{ width: `${coverageFill}%` }} />
+              </div>
+              <div className="coverage-meta">
+                <span>
+                  <strong>{trustShare}%</strong> trusted endpoint share
+                </span>
+                <span>
+                  <strong>{identityDensity.toFixed(2)}x</strong> identities per endpoint
+                </span>
+              </div>
             </div>
-            <div className="coverage-stat">
-              <span className="coverage-stat-value">{trustedEndpoints}</span>
-              <span className="coverage-stat-label">Trusted endpoints</span>
-            </div>
-            <div className="coverage-stat">
-              <span className="coverage-stat-value">{rawEndpoints}</span>
-              <span className="coverage-stat-label">Raw endpoints</span>
+
+            <div className="aggregate-duplicates">
+              <div className="section-title-help">
+                <h3>Cross-Protocol Duplicates</h3>
+                <span className="help-tip" title="Identities simultaneously present on TCP and UDP in the same snapshot.">?</span>
+              </div>
+              <p className="metric small">{duplicateCount}</p>
+              <div className="duplicate-meter" aria-hidden="true">
+                <span className="duplicate-meter-fill" style={{ width: `${Math.max(4, duplicateRatioPct)}%` }} />
+              </div>
+              {duplicatePreview.length ? (
+                <p className="source-meta">
+                  {duplicatePreview
+                    .map((item) => `${item.identity} [${(item.protocols || []).join("/")}]`)
+                    .join(" | ")}
+                </p>
+              ) : <p className="source-meta">None</p>}
             </div>
           </div>
-          <div className="coverage-bar" aria-hidden="true">
-            <span className="coverage-bar-fill" style={{ width: `${coverageFill}%` }} />
-          </div>
-          <div className="coverage-meta">
-            <span>
-              <strong>{trustShare}%</strong> trusted endpoint share
-            </span>
-            <span>
-              <strong>{identityDensity.toFixed(2)}x</strong> identities per endpoint
-            </span>
-          </div>
-          <p className="hint">Useful audit baseline for real user/device diversity versus transient endpoint storms.</p>
-        </article>
       </section>
 
       <section className="panel section-panel">
         <div className="section-heading">
           <div>
-            <h2>Active Sessions</h2>
-            <p className="section-subtitle">Live sessions with audit labels, protocol mix, and connection details.</p>
+            <div className="section-title-help">
+              <h2>Active Sessions</h2>
+              <span className="help-tip" title="Live connections with protocol/device/audit labels.">?</span>
+            </div>
           </div>
           <div className="sessions-toolbar">
-            <div className="chip-row" aria-label="Active session summary">
+            <div className="chip-row compact-chips" aria-label="Active session summary">
               <span className="chip">
                 <strong>{summary.active_clients ?? 0}</strong> raw
               </span>
@@ -472,7 +527,7 @@ export function DashboardPage() {
         {controlFeatures.enabled ? null : controlFeatures.control_available ? (
           <p className="hint">Row termination stays locked until you log in from the control icon.</p>
         ) : (
-          <p className="hint">Session termination is disabled. Enable with PORTAL_CONTROL_ENABLED=1.</p>
+          <p className="hint">Session termination unavailable.</p>
         )}
         {terminateResult ? <p className="control-result">{terminateResult}</p> : null}
         <div className="table-wrap">
@@ -546,10 +601,12 @@ export function DashboardPage() {
       <section className="panel section-panel">
         <div className="section-heading">
           <div>
-            <h2>Usage by User (Current Snapshot)</h2>
-            <p className="section-subtitle">Ranked by total traffic so the busiest users stay visible first.</p>
+            <div className="section-title-help">
+              <h2>Usage by User (Current Snapshot)</h2>
+              <span className="help-tip" title="Users ranked by current snapshot traffic.">?</span>
+            </div>
           </div>
-          <div className="chip-row" aria-label="User usage summary">
+          <div className="chip-row compact-chips" aria-label="User usage summary">
             <span className="chip">
               <strong>{usageUsers.length}</strong> users
             </span>
@@ -594,12 +651,12 @@ export function DashboardPage() {
       <section className="panel section-panel">
         <div className="section-heading">
           <div>
-            <h2>History (Last 7 Days)</h2>
-            <p className="section-subtitle">
-              Daily snapshots highlight active-client peaks and traffic maxima across the retention window.
-            </p>
+            <div className="section-title-help">
+              <h2>History (Last 7 Days)</h2>
+              <span className="help-tip" title="Daily peaks and traffic maxima from retained samples.">?</span>
+            </div>
           </div>
-          <div className="chip-row" aria-label="History summary">
+          <div className="chip-row compact-chips" aria-label="History summary">
             <span className="chip">
               <strong>{historyDays.length}</strong> days
             </span>
@@ -607,7 +664,7 @@ export function DashboardPage() {
               <strong>{historySamples}</strong> samples
             </span>
             <span className="chip">
-              <strong>{historyLatest}</strong> latest
+              <strong>{historyLatestShort}</strong> latest
             </span>
           </div>
         </div>

@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getControlLatency, getStatusFile } from "../api/client";
 
-const portalIconUrl = "/static/openvpn-icon.svg";
-
 const EMPTY_STATUS = {
   status_file: "",
   read_error: "",
@@ -98,7 +96,7 @@ export function StatusFilePage() {
   const [sourceLogs, setSourceLogs] = useState({});
   const [controlLatency, setControlLatency] = useState(EMPTY_CONTROL_LATENCY);
   const [latencyError, setLatencyError] = useState("");
-  const [copyState, setCopyState] = useState("");
+  const [incidentTipsOpen, setIncidentTipsOpen] = useState(false);
   const [timeNowMs, setTimeNowMs] = useState(Date.now());
 
   useEffect(() => {
@@ -218,9 +216,6 @@ export function StatusFilePage() {
     return statusSources;
   }, [statusSources, sourceFilter]);
 
-  const selectedSourceSummary = statusData.source_summary || {};
-  const selectedInferenceCounts = statusData.source_device_inference_counts || {};
-  const selectedInferenceEntries = Object.entries(selectedInferenceCounts).sort((a, b) => Number(b[1]) - Number(a[1]));
   const selectedDuplicateCount = Number(statusData.diagnostics?.cross_protocol_duplicate_count || 0);
   const selectedParseDiagnostics = statusData.source_parse_diagnostics || {};
   const duplicateIdentities = Array.isArray(statusData.diagnostics?.cross_protocol_duplicates)
@@ -304,31 +299,8 @@ export function StatusFilePage() {
     URL.revokeObjectURL(href);
   };
 
-  const copyIncidentSummary = async () => {
-    const staleSourceCount = statusSources.filter((source) => {
-      const freshness = source?.freshness_seconds;
-      return freshness !== null && freshness !== undefined && Number(freshness) > SOURCE_STALE_THRESHOLD_SECONDS;
-    }).length;
-    const parseErrorCount = statusSources.reduce((acc, source) => acc + safeNumber(source?.parse_error_count, 0), 0);
-    const summary = [
-      `generated_at=${statusData.generated_at || "n/a"}`,
-      `sources_total=${statusSources.length}`,
-      `sources_stale=${staleSourceCount}`,
-      `parse_errors_total=${parseErrorCount}`,
-      `cross_protocol_duplicates=${selectedDuplicateCount}`,
-      `control_p95_ms=${safeNumber(controlLatency.overall?.p95_latency_ms, 0)}`,
-      `control_failure_rate=${safeNumber(controlLatency.overall?.failure_rate, 0)}`,
-      `active_filters=source:${sourceFilter},session:${sessionClassFilter},identity:${selectedIdentity || "none"}`,
-    ].join("\n");
-
-    try {
-      await navigator.clipboard.writeText(summary);
-      setCopyState("Incident summary copied.");
-      window.setTimeout(() => setCopyState(""), 2200);
-    } catch {
-      setCopyState("Clipboard write failed.");
-      window.setTimeout(() => setCopyState(""), 2200);
-    }
+  const toggleIncidentTips = () => {
+    setIncidentTipsOpen((prev) => !prev);
   };
 
   const toggleSourceView = async (sourcePath) => {
@@ -379,18 +351,46 @@ export function StatusFilePage() {
 
   return (
     <>
-      <header className="top hero">
+      <header className="top hero status-page-hero">
         <div className="brand-row">
           <div className="brand-title">
-            <img className="brand-icon" src={portalIconUrl} alt="OpenVPN icon" />
+            <svg className="brand-icon page-brand-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 4c5.8 0 9.4 6.5 9.5 6.8a1 1 0 0 1 0 .4C21.4 11.5 17.8 18 12 18S2.6 11.5 2.5 11.2a1 1 0 0 1 0-.4C2.6 10.5 6.2 4 12 4zm0 2c-3.9 0-6.7 3.9-7.5 5 .8 1.1 3.6 5 7.5 5s6.7-3.9 7.5-5c-.8-1.1-3.6-5-7.5-5zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z" />
+            </svg>
             <div>
-              <p className="eyebrow">OpenVPN Ops Portal</p>
               <h1>Status Explorer</h1>
             </div>
           </div>
           <div className="status-hero-controls">
-            <div className="live-pill">Read-only source</div>
-            <div className="chip-row status-hero-chip-row" aria-label="Status explorer source filters">
+            <div className="status-hero-part status-hero-part-stack" aria-label="Status explorer source filters">
+              <div className="live-pill">Read-only source</div>
+            </div>
+          </div>
+        </div>
+        <p className="hint">
+          Auto-refresh age: <strong>{generatedAgeSeconds === null ? "n/a" : `${generatedAgeSeconds.toFixed(1)}s`}</strong>
+        </p>
+        <div className="chip-row status-hero-chip-row compact-chips status-hero-bottom-chip-row" aria-label="Selected parser diagnostics">
+          <span className="chip">
+            Mode <strong>{parseModeLabel(selectedParseDiagnostics.parse_mode)}</strong>
+          </span>
+          <span className="chip">
+            Parsed <strong>{safeNumber(selectedParseDiagnostics.client_rows_parsed, 0)}</strong>/{safeNumber(selectedParseDiagnostics.client_rows_seen, 0)}
+          </span>
+          <span className="chip">
+            Skipped <strong>{safeNumber(selectedParseDiagnostics.client_rows_skipped, 0)}</strong>
+          </span>
+        </div>
+      </header>
+
+      <section className="panel section-panel">
+        <div className="section-heading source-section-head">
+          <div className="section-title-help">
+            <h2>Source</h2>
+            <span className="help-tip" title="Current status file details, parser health, and per-source drill-down.">?</span>
+          </div>
+          <div className="source-header-controls" aria-label="Source controls">
+            <div className="chip-row compact-chips source-header-chip-row" aria-label="Status explorer source filters">
               <span className={`chip ${sourceFilter === "all" ? "is-active" : ""}`}>
                 <Link className="chip-link" to={buildStatusFileLink({ filter: "all" })}>
                   <strong>{statusSources.length}</strong> all
@@ -407,19 +407,32 @@ export function StatusFilePage() {
                 </Link>
               </span>
             </div>
+            <div className="status-actions status-actions-icon" aria-label="Source actions">
+              <button
+                type="button"
+                className="source-view-button icon-only"
+                onClick={exportCurrentSnapshot}
+                title="Export snapshot JSON"
+                aria-label="Export snapshot JSON"
+              >
+                <svg viewBox="0 0 24 24" className="source-view-icon" aria-hidden="true" focusable="false">
+                  <path d="M12 3a1 1 0 0 1 1 1v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 3.98a1 1 0 0 1-1.4 0l-4-3.98a1 1 0 1 1 1.4-1.42l2.3 2.3V4a1 1 0 0 1 1-1zm-7 14a1 1 0 0 1 1 1v1h12v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="source-view-button icon-only"
+                onClick={toggleIncidentTips}
+                title="View incident tips"
+                aria-label="View incident tips"
+              >
+                <svg viewBox="0 0 24 24" className="source-view-icon" aria-hidden="true" focusable="false">
+                  <path d="M12 5c6.2 0 10 7 10 7s-3.8 7-10 7S2 12 2 12s3.8-7 10-7zm0 2.2A4.8 4.8 0 1 0 12 16.8 4.8 4.8 0 0 0 12 7.2zm0 2.2a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 0 1 0-5.2z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-        <p className="sub">Raw tails plus parsed backend diagnostics (session trust, device-hint source, and cross-protocol duplicates).</p>
-        <p className="hint">
-          Auto-refresh age: <strong>{generatedAgeSeconds === null ? "n/a" : `${generatedAgeSeconds.toFixed(1)}s`}</strong>
-        </p>
-        <p className="source-path">
-          <Link to="/">Back to dashboard</Link>
-        </p>
-      </header>
-
-      <section className="panel section-panel">
-        <h2>Source</h2>
         <div className="hero-meta">
           <span>
             Path: <strong>{statusData.status_file || "n/a"}</strong>
@@ -434,96 +447,39 @@ export function StatusFilePage() {
             Generated at: <strong>{statusData.generated_at || "n/a"}</strong>
           </span>
         </div>
-        <div className="chip-row" aria-label="Selected source diagnostics">
-          <span className="chip">
-            <strong>{selectedSourceSummary.session_count || 0}</strong> sessions
-          </span>
-          <span className="chip">
-            <strong>{selectedSourceSummary.trusted_count || 0}</strong> trusted
-          </span>
-          <span className="chip">
-            <strong>{selectedSourceSummary.suspect_count || 0}</strong> suspect
-          </span>
-          <span className="chip">
-            <strong>{selectedDuplicateCount}</strong> cross-protocol duplicates
-          </span>
-          <span className="chip">
-            <strong>{safeNumber(selectedParseDiagnostics.client_rows_skipped, 0)}</strong> selected parse errors
-          </span>
-          <span className="chip">
-            <strong>{safeNumber(controlLatency.overall?.p95_latency_ms, 0)}</strong> p95 control ms
-          </span>
-        </div>
-        <div className="status-actions">
-          <button type="button" className="source-view-button" onClick={exportCurrentSnapshot}>
-            Export Snapshot JSON
-          </button>
-          <button type="button" className="source-view-button" onClick={copyIncidentSummary}>
-            Copy Incident Summary
-          </button>
-          {copyState ? <span className="source-meta">{copyState}</span> : null}
-        </div>
-        <div className="chip-row" aria-label="Source session class filters">
-          <span className={`chip ${sessionClassFilter === "all" ? "is-active" : ""}`}>
-            <Link className="chip-link" to={buildStatusFileLink({ sessionClass: "all" })}>
-              all sessions
-            </Link>
-          </span>
-          <span className={`chip ${sessionClassFilter === "trusted" ? "is-active" : ""}`}>
-            <Link className="chip-link" to={buildStatusFileLink({ sessionClass: "trusted" })}>
-              trusted
-            </Link>
-          </span>
-          <span className={`chip ${sessionClassFilter === "suspect" ? "is-active" : ""}`}>
-            <Link className="chip-link" to={buildStatusFileLink({ sessionClass: "suspect" })}>
-              suspect
-            </Link>
-          </span>
-          <span className={`chip ${sessionClassFilter === "duplicate" ? "is-active" : ""}`}>
-            <Link className="chip-link" to={buildStatusFileLink({ sessionClass: "duplicate" })}>
-              duplicate identity
-            </Link>
-          </span>
-        </div>
-        <div className="source-context-grid" aria-label="Selected source parsing and metadata">
-          <article className="source-context-card">
-            <h3>Status Inputs</h3>
+        {incidentTipsOpen ? (
+          <div className="source-tip-panel" aria-label="Incident tips">
             <p className="source-meta">
-              TCP/UDP status files are live server snapshots. <strong>{statusData.device_hints_file?.path || "device hints"}</strong> is
-              client-connect metadata used for device/platform enrichment.
+              Generated at: <strong>{statusData.generated_at || "n/a"}</strong>
             </p>
-            {selectedInferenceEntries.length ? (
-              <p className="source-meta">
-                Device inference: {selectedInferenceEntries.map(([key, count]) => `${key}=${count}`).join(" | ")}
-              </p>
-            ) : null}
-          </article>
-          <article className="source-context-card">
-            <h3>Parsing</h3>
-            <div className="chip-row" aria-label="Selected parser diagnostics">
-              <span className="chip">
-                Mode <strong>{parseModeLabel(selectedParseDiagnostics.parse_mode)}</strong>
-              </span>
-              <span className="chip">
-                Parsed <strong>{safeNumber(selectedParseDiagnostics.client_rows_parsed, 0)}</strong>/{safeNumber(selectedParseDiagnostics.client_rows_seen, 0)}
-              </span>
-              <span className="chip">
-                Skipped <strong>{safeNumber(selectedParseDiagnostics.client_rows_skipped, 0)}</strong>
-              </span>
-            </div>
-            {Object.keys(selectedParseDiagnostics.skip_reasons || {}).length ? (
-              <p className="source-meta">
-                Skip reasons: {Object.entries(selectedParseDiagnostics.skip_reasons)
-                  .map(([reason, count]) => `${reason}=${count}`)
-                  .join(" | ")}
-              </p>
-            ) : null}
-          </article>
-        </div>
+            <p className="source-meta">
+              Sources: <strong>{statusSources.length}</strong> total, <strong>{statusSources.filter((source) => {
+                const freshness = source?.freshness_seconds;
+                return freshness !== null && freshness !== undefined && Number(freshness) > SOURCE_STALE_THRESHOLD_SECONDS;
+              }).length}</strong> stale
+            </p>
+            <p className="source-meta">
+              Parse errors: <strong>{statusSources.reduce((acc, source) => acc + safeNumber(source?.parse_error_count, 0), 0)}</strong>
+            </p>
+            <p className="source-meta">
+              Cross-protocol duplicates: <strong>{selectedDuplicateCount}</strong>
+            </p>
+            <p className="source-meta">
+              Control p95: <strong>{safeNumber(controlLatency.overall?.p95_latency_ms, 0)}ms</strong>
+            </p>
+          </div>
+        ) : null}
+        <p className="source-meta">Hints file: {statusData.device_hints_file?.path || "n/a"}</p>
+        {Object.keys(selectedParseDiagnostics.skip_reasons || {}).length ? (
+          <p className="source-meta">
+            Skip reasons: {Object.entries(selectedParseDiagnostics.skip_reasons)
+              .map(([reason, count]) => `${reason}=${count}`)
+              .join(" | ")}
+          </p>
+        ) : null}
 
         {filteredSources.length ? (
           <>
-            <p className="hint">View logs per source:</p>
             <div className="source-list">
               {filteredSources.map((source) => {
                 const sourcePath = source.path;
@@ -651,8 +607,10 @@ export function StatusFilePage() {
 
         {duplicateIdentities.length ? (
           <>
-            <h2>Identity Drill-Down</h2>
-            <p className="hint">Select an identity to compare TCP and UDP sessions side-by-side.</p>
+            <div className="section-title-help">
+              <h2>Identity Drill-Down</h2>
+              <span className="help-tip" title="Pick an identity to compare active TCP vs UDP sessions.">?</span>
+            </div>
             <div className="chip-row" aria-label="Duplicate identity selector">
               {duplicateIdentities.map((entry) => {
                 const identity = String(entry.identity || "");
@@ -742,7 +700,10 @@ export function StatusFilePage() {
           </>
         ) : null}
 
-        <h2>Control Command Latency</h2>
+        <div className="section-title-help">
+          <h2>Control Command Latency</h2>
+          <span className="help-tip" title="Recent control-action latency and failure rates over rolling window.">?</span>
+        </div>
         <p className="source-meta">
           window={safeNumber(controlLatency.window_seconds, LATENCY_WINDOW_SECONDS)}s | samples={safeNumber(controlLatency.overall?.samples, 0)} |
           failures={safeNumber(controlLatency.overall?.failures, 0)} | p50={safeNumber(controlLatency.overall?.p50_latency_ms, 0)}ms |

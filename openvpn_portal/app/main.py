@@ -61,6 +61,18 @@ _last_terminate_request_monotonic = 0.0
 _control_latency_samples: deque[dict] = deque(maxlen=500)
 
 
+def _control_auth_config_error() -> str:
+    if not settings.control_auth_secret_id:
+        return "Control auth secret is not configured (set PORTAL_CONTROL_AUTH_SECRET_ID)"
+    if not control_auth_service.enabled:
+        return "Control auth secret is missing required username/password or password_hash"
+    return ""
+
+
+def _control_auth_available() -> bool:
+    return not _control_auth_config_error()
+
+
 def _record_control_latency(
     *,
     protocol: str,
@@ -485,26 +497,28 @@ def api_control_features(
     authorization: str | None = Header(default=None),
     x_portal_control_token: str | None = Header(default=None),
 ) -> JSONResponse:
-    provided_token = _extract_token(authorization, x_portal_control_token)
-    if control_auth_service.enabled:
-        is_authenticated = control_auth_service.validate_session(provided_token)
+    if not _control_auth_available():
         return JSONResponse(
             {
-                "enabled": is_authenticated,
-                "control_available": True,
+                "enabled": False,
+                "control_available": False,
                 "auth_required": True,
-                "auth_mode": "userpass_session",
-                "allowed_actions": settings.control_allowed_actions if is_authenticated else [],
+                "auth_mode": "secret_session",
+                "allowed_actions": [],
+                "config_error": _control_auth_config_error(),
             }
         )
 
+    provided_token = _extract_token(authorization, x_portal_control_token)
+    is_authenticated = control_auth_service.validate_session(provided_token)
     return JSONResponse(
         {
-            "enabled": settings.control_enabled,
-            "control_available": settings.control_enabled,
-            "auth_required": bool(settings.control_token),
-            "auth_mode": "legacy_token" if settings.control_token else "feature_flag",
-            "allowed_actions": settings.control_allowed_actions,
+            "enabled": is_authenticated,
+            "control_available": True,
+            "auth_required": True,
+            "auth_mode": "secret_session",
+            "allowed_actions": settings.control_allowed_actions if is_authenticated else [],
+            "config_error": "",
         }
     )
 
@@ -515,8 +529,8 @@ def api_control_auth_login(
     request: Request,
     x_forwarded_for: str | None = Header(default=None),
 ) -> JSONResponse:
-    if not control_auth_service.enabled:
-        raise HTTPException(status_code=400, detail="Control auth is not configured")
+    if not _control_auth_available():
+        raise HTTPException(status_code=503, detail=_control_auth_config_error())
 
     try:
         session_token = control_auth_service.authenticate(
@@ -553,18 +567,12 @@ async def api_control_actions(
     authorization: str | None = Header(default=None),
     x_portal_control_token: str | None = Header(default=None),
 ) -> JSONResponse:
-    provided_token = _extract_token(authorization, x_portal_control_token)
-    if control_auth_service.enabled:
-        if not control_auth_service.validate_session(provided_token):
-            raise HTTPException(status_code=401, detail="Control session invalid or expired")
-    else:
-        if not settings.control_enabled:
-            raise HTTPException(status_code=403, detail="Control API is disabled by feature flag")
+    if not _control_auth_available():
+        raise HTTPException(status_code=503, detail=_control_auth_config_error())
 
-        expected_token = settings.control_token
-        if expected_token:
-            if not provided_token or provided_token != expected_token:
-                raise HTTPException(status_code=401, detail="Invalid control token")
+    provided_token = _extract_token(authorization, x_portal_control_token)
+    if not control_auth_service.validate_session(provided_token):
+        raise HTTPException(status_code=401, detail="Control session invalid or expired")
 
     action = body.action.strip().lower()
     if action not in settings.control_allowed_actions:
