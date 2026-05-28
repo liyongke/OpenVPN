@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.config import load_settings
+from app.services.control_auth import ControlAuthError, ControlAuthService, ControlAuthSettings
 from app.services.geoip import GeoIpService
 from app.services.history_store import HistoryStore
 from app.services.live_state import LiveStateCollector
@@ -41,6 +42,14 @@ control_service = OpenVPNControlService(
         management_tcp_socket=settings.openvpn_management_tcp_socket,
         management_udp_socket=settings.openvpn_management_udp_socket,
         management_timeout_seconds=max(1.0, settings.openvpn_management_timeout_seconds),
+    )
+)
+control_auth_service = ControlAuthService(
+    ControlAuthSettings(
+        username=settings.control_auth_username,
+        password=settings.control_auth_password,
+        session_ttl_seconds=settings.control_auth_session_ttl_seconds,
+        max_sessions=settings.control_auth_max_sessions,
     )
 )
 _last_terminate_request_monotonic = 0.0
@@ -74,6 +83,11 @@ frontend_index_file = frontend_assets_dir / "index.html"
 
 class ControlActionRequest(BaseModel):
     action: str
+
+
+class ControlAuthLoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 def _extract_token(auth_header: str | None, x_control_token: str | None) -> str:
@@ -247,14 +261,60 @@ def api_monitoring_backend() -> JSONResponse:
 
 
 @app.get("/api/control/features")
-def api_control_features() -> JSONResponse:
+def api_control_features(
+    authorization: str | None = Header(default=None),
+    x_portal_control_token: str | None = Header(default=None),
+) -> JSONResponse:
+    provided_token = _extract_token(authorization, x_portal_control_token)
+    if control_auth_service.enabled:
+        is_authenticated = control_auth_service.validate_session(provided_token)
+        return JSONResponse(
+            {
+                "enabled": is_authenticated,
+                "auth_required": True,
+                "auth_mode": "userpass_session",
+                "allowed_actions": settings.control_allowed_actions if is_authenticated else [],
+            }
+        )
+
     return JSONResponse(
         {
             "enabled": settings.control_enabled,
             "auth_required": bool(settings.control_token),
+            "auth_mode": "legacy_token" if settings.control_token else "feature_flag",
             "allowed_actions": settings.control_allowed_actions,
         }
     )
+
+
+@app.post("/api/control/auth/login")
+def api_control_auth_login(body: ControlAuthLoginRequest) -> JSONResponse:
+    if not control_auth_service.enabled:
+        raise HTTPException(status_code=400, detail="Control auth is not configured")
+
+    try:
+        session_token = control_auth_service.authenticate(body.username, body.password)
+    except ControlAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "control_token": session_token,
+            "expires_in_seconds": settings.control_auth_session_ttl_seconds,
+            "message": "Control session authenticated",
+        }
+    )
+
+
+@app.post("/api/control/auth/logout")
+def api_control_auth_logout(
+    authorization: str | None = Header(default=None),
+    x_portal_control_token: str | None = Header(default=None),
+) -> JSONResponse:
+    provided_token = _extract_token(authorization, x_portal_control_token)
+    control_auth_service.logout(provided_token)
+    return JSONResponse({"ok": True, "message": "Control session logged out"})
 
 
 @app.post("/api/control/actions")
@@ -263,14 +323,18 @@ async def api_control_actions(
     authorization: str | None = Header(default=None),
     x_portal_control_token: str | None = Header(default=None),
 ) -> JSONResponse:
-    if not settings.control_enabled:
-        raise HTTPException(status_code=403, detail="Control API is disabled by feature flag")
-
-    expected_token = settings.control_token
     provided_token = _extract_token(authorization, x_portal_control_token)
-    if expected_token:
-        if not provided_token or provided_token != expected_token:
-            raise HTTPException(status_code=401, detail="Invalid control token")
+    if control_auth_service.enabled:
+        if not control_auth_service.validate_session(provided_token):
+            raise HTTPException(status_code=401, detail="Control session invalid or expired")
+    else:
+        if not settings.control_enabled:
+            raise HTTPException(status_code=403, detail="Control API is disabled by feature flag")
+
+        expected_token = settings.control_token
+        if expected_token:
+            if not provided_token or provided_token != expected_token:
+                raise HTTPException(status_code=401, detail="Invalid control token")
 
     action = body.action.strip().lower()
     if action not in settings.control_allowed_actions:

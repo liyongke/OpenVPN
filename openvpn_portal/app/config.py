@@ -29,6 +29,10 @@ class Settings:
     openvpn_management_timeout_seconds: float
     control_terminate_min_interval_seconds: float
     sessions_api_max_limit: int
+    control_auth_username: str
+    control_auth_password: str
+    control_auth_session_ttl_seconds: int
+    control_auth_max_sessions: int
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -116,4 +120,8 @@ def load_settings() -> Settings:
             os.getenv("PORTAL_CONTROL_TERMINATE_MIN_INTERVAL_SECONDS", "2.0")
         ),
         sessions_api_max_limit=max(10, int(os.getenv("PORTAL_SESSIONS_API_MAX_LIMIT", "1000"))),
+        control_auth_username=os.getenv("PORTAL_CONTROL_AUTH_USERNAME", "").strip(),
+        control_auth_password=os.getenv("PORTAL_CONTROL_AUTH_PASSWORD", ""),
+        control_auth_session_ttl_seconds=max(60, int(os.getenv("PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS", "3600"))),
+        control_auth_max_sessions=max(1, int(os.getenv("PORTAL_CONTROL_AUTH_MAX_SESSIONS", "256"))),
     )

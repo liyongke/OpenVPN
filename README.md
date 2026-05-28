@@ -118,6 +118,8 @@ Manual dispatch inputs:
 - `GET /api/monitoring/backend`: backend collector monitoring (refresh attempts/failures, error rate, last refresh error).
 - `GET /api/live/sessions`: live SSE snapshots.
 - `GET /api/history/7d`: persisted trend history.
+- `POST /api/control/auth/login`: user/password authentication to unlock control pane actions.
+- `POST /api/control/auth/logout`: invalidate control session token.
 - `POST /api/control/actions`: feature-flagged control actions (`refresh_snapshot`, `sample_history`, `terminate_head_session`).
 
 ## Read by Goal

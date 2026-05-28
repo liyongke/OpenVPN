@@ -68,7 +68,9 @@ Audit/stability note:
 - No historical monthly usage unless status snapshots are externally archived.
 
 Control API scope note:
-- Optional control actions are gated by feature flag/token and include `refresh_snapshot`, `sample_history`, and `terminate_head_session`.
+- Optional control actions include `refresh_snapshot`, `sample_history`, and `terminate_head_session`.
+- Preferred enablement is username/password login to issue a short-lived control session token.
+- Legacy feature-flag/token mode remains available when control auth credentials are not configured.
 - `terminate_head_session` targets the first row in Active Sessions and requires either:
    - OpenVPN management sockets (`PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET` / `PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET`), or
    - a custom terminate command via `PORTAL_CONTROL_TERMINATE_COMMAND`.
@@ -105,6 +107,8 @@ Control API scope note:
 - GET /api/history/7d
 - GET /api/status-file
 - GET /api/control/features
+- POST /api/control/auth/login
+- POST /api/control/auth/logout
 - POST /api/control/actions
 - GET /status-file
 
@@ -131,10 +135,18 @@ Environment variables:
 - PORTAL_GEOIP_DB_PATH default: empty (when set, use local GeoLite2 DB first and fall back to ipwho.is)
 - PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
 - PORTAL_CONTROL_ALLOWED_ACTIONS default: refresh_snapshot,sample_history,terminate_head_session
+- PORTAL_CONTROL_AUTH_USERNAME default: empty (when set with password, enables session auth mode)
+- PORTAL_CONTROL_AUTH_PASSWORD default: empty
+- PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS default: 3600
+- PORTAL_CONTROL_AUTH_MAX_SESSIONS default: 256
 - PORTAL_CONTROL_TERMINATE_COMMAND default: empty (optional command template)
 - PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET default: empty
 - PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET default: empty
 - PORTAL_OPENVPN_MANAGEMENT_TIMEOUT_SECONDS default: 2.0
+- PORTAL_CONTROL_TERMINATE_MIN_INTERVAL_SECONDS default: 2.0
+- PORTAL_SESSIONS_API_MAX_LIMIT default: 1000
+- PORTAL_HISTORY_PAYLOAD_MODE default: summary (`summary|full|none`)
+- PORTAL_HISTORY_PAYLOAD_SESSION_CAP default: 50
 
 ## Notes for your existing deployment
 

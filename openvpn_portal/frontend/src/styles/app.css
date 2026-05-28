@@ -789,7 +789,7 @@ tbody tr:hover {
 
 .control-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
   column-gap: 16px;
   row-gap: 4px;
@@ -823,6 +823,44 @@ tbody tr:hover {
 
 .control-header-chips .chip strong {
   font-size: 0.82rem;
+}
+
+.control-auth-icon {
+  border: 1px solid rgba(151, 180, 225, 0.24);
+  background: rgba(9, 17, 31, 0.9);
+  color: var(--brand-strong);
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.control-auth-icon:hover {
+  border-color: rgba(105, 183, 255, 0.45);
+}
+
+.control-auth-panel {
+  margin-top: 12px;
+  border: 1px solid rgba(151, 180, 225, 0.16);
+  border-radius: 12px;
+  background: rgba(12, 22, 38, 0.74);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.control-auth-panel h3 {
+  margin: 0 0 4px;
+  color: var(--brand-strong);
+  font-size: 0.92rem;
+}
+
+.control-auth-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .control-grid {
@@ -1093,6 +1131,10 @@ tbody tr:hover {
   .control-header {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .control-auth-icon {
+    justify-self: start;
   }
 
   .control-header-chips {

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip } from "react-leaflet";
-import { getBackendMonitoring, getControlFeatures, getMapSessions, runControlAction } from "../api/client";
+import {
+  getBackendMonitoring,
+  getControlFeatures,
+  getMapSessions,
+  loginControl,
+  logoutControl,
+  runControlAction,
+} from "../api/client";
 import "leaflet/dist/leaflet.css";
 
 const DEFAULT_FEATURES = {
@@ -34,7 +41,12 @@ const DEFAULT_MAP = {
 
 export function ControlPage() {
   const [features, setFeatures] = useState(DEFAULT_FEATURES);
-  const [token, setToken] = useState("");
+  const [controlToken, setControlToken] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [result, setResult] = useState("");
   const [monitoring, setMonitoring] = useState(DEFAULT_MONITORING);
@@ -45,22 +57,25 @@ export function ControlPage() {
   useEffect(() => {
     let mounted = true;
 
-    getControlFeatures()
-      .then((payload) => {
+    const refreshFeatures = async () => {
+      try {
+        const payload = await getControlFeatures(controlToken.trim());
         if (mounted) {
           setFeatures(payload);
         }
-      })
-      .catch((error) => {
+      } catch (error) {
         if (mounted) {
           setResult(`Failed to load control features: ${error.message}`);
         }
-      });
+      }
+    };
+
+    refreshFeatures();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [controlToken]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,7 +189,7 @@ export function ControlPage() {
     setLoadingAction(action);
     setResult("");
     try {
-      const payload = await runControlAction(action, token.trim());
+      const payload = await runControlAction(action, controlToken.trim());
       setResult(`${payload.message} (${payload.action})`);
     } catch (error) {
       setResult(`Action failed: ${error.message}`);
@@ -182,6 +197,43 @@ export function ControlPage() {
       setLoadingAction("");
     }
   };
+
+  const login = async () => {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      const payload = await loginControl(authUsername.trim(), authPassword);
+      const issuedToken = String(payload?.control_token || "").trim();
+      if (!issuedToken) {
+        throw new Error("Control login returned empty session token");
+      }
+      setControlToken(issuedToken);
+      setAuthOpen(false);
+      setAuthPassword("");
+      setAuthMessage("Control pane unlocked");
+    } catch (error) {
+      setAuthMessage(`Login failed: ${error.message}`);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    setAuthBusy(true);
+    setAuthMessage("");
+    try {
+      await logoutControl(controlToken.trim());
+    } catch {
+      // Ignore logout errors and clear local session anyway.
+    } finally {
+      setControlToken("");
+      setAuthBusy(false);
+      setAuthMessage("Control pane locked");
+    }
+  };
+
+  const showAuthOptional = !features.auth_required && features.auth_mode !== "userpass_session";
+  const isUnlocked = Boolean(features.enabled);
 
   return (
     <section className="panel control-placeholder">
@@ -201,8 +253,66 @@ export function ControlPage() {
             Backend <strong>{monitoring.backend_online ? "online" : "offline"}</strong>
           </span>
         </div>
+        <button
+          type="button"
+          className="control-auth-icon"
+          onClick={() => setAuthOpen((prev) => !prev)}
+          aria-label="Open control authentication"
+          title="Authenticate control actions"
+        >
+          {isUnlocked ? "🔓" : "🔒"}
+        </button>
         <p className="sub control-sub-full">Feature-flagged operations require authentication and are disabled by default.</p>
       </div>
+
+      {authOpen ? (
+        <article className="control-auth-panel" aria-label="Control authentication panel">
+          <h3>Control Authentication</h3>
+          <label className="control-label" htmlFor="control-auth-username">
+            Username
+          </label>
+          <input
+            id="control-auth-username"
+            className="control-input"
+            type="text"
+            autoComplete="username"
+            placeholder="Enter control username"
+            value={authUsername}
+            onChange={(event) => setAuthUsername(event.target.value)}
+          />
+          <label className="control-label" htmlFor="control-auth-password">
+            Password
+          </label>
+          <input
+            id="control-auth-password"
+            className="control-input"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Enter control password"
+            value={authPassword}
+            onChange={(event) => setAuthPassword(event.target.value)}
+          />
+          <div className="control-auth-actions">
+            <button
+              type="button"
+              className="control-button"
+              disabled={authBusy || !authUsername.trim() || !authPassword}
+              onClick={login}
+            >
+              {authBusy ? "Authorizing..." : "Authorize"}
+            </button>
+            <button
+              type="button"
+              className="control-button"
+              disabled={authBusy || !controlToken.trim()}
+              onClick={logout}
+            >
+              Lock
+            </button>
+          </div>
+          {authMessage ? <p className="control-result">{authMessage}</p> : null}
+        </article>
+      ) : null}
 
       <div className="control-grid">
         <article className="control-card">
@@ -236,23 +346,6 @@ export function ControlPage() {
         </article>
 
         <article className="control-card">
-          <h3>Credentials</h3>
-          <label className="control-label" htmlFor="control-token">
-            Bearer token
-          </label>
-          <input
-            id="control-token"
-            className="control-input"
-            type="password"
-            autoComplete="off"
-            placeholder="Enter control token"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-          <p className="hint">Token is sent only when executing actions.</p>
-        </article>
-
-        <article className="control-card">
           <h3>Actions</h3>
           <div className="control-actions">
             <button
@@ -280,7 +373,11 @@ export function ControlPage() {
               {loadingAction === "terminate_head_session" ? "Running..." : "Force Terminate Head Session"}
             </button>
           </div>
-          {!features.enabled ? <p className="hint">Enable with PORTAL_CONTROL_ENABLED=1 on backend.</p> : null}
+          {!features.enabled ? (
+            <p className="hint">
+              {showAuthOptional ? "Control API is in legacy mode and currently disabled by backend feature flag." : "Use the lock icon to authenticate and unlock control actions."}
+            </p>
+          ) : null}
           {result ? <p className="control-result">{result}</p> : null}
         </article>
 

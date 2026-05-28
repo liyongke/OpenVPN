@@ -56,12 +56,28 @@ export function getMapSessions() {
   return fetchJson("/api/map/sessions");
 }
 
-export function getControlFeatures() {
-  return fetchJson("/api/control/features");
+export async function getControlFeatures(token = "") {
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const response = await fetch("/api/control/features", { cache: "no-store", headers });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json();
 }
 
 export function runControlAction(action, token = "") {
   return postJson("/api/control/actions", { action }, token);
+}
+
+export function loginControl(username, password) {
+  return postJson("/api/control/auth/login", { username, password });
+}
+
+export function logoutControl(token = "") {
+  return postJson("/api/control/auth/logout", {}, token);
 }
 
 export function getStatusFile(file = "", lines = 400) {
