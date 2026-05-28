@@ -48,8 +48,12 @@ control_auth_service = ControlAuthService(
     ControlAuthSettings(
         username=settings.control_auth_username,
         password=settings.control_auth_password,
+        password_hash=settings.control_auth_password_hash,
         session_ttl_seconds=settings.control_auth_session_ttl_seconds,
         max_sessions=settings.control_auth_max_sessions,
+        max_failed_attempts=settings.control_auth_max_failed_attempts,
+        failed_attempt_window_seconds=settings.control_auth_failed_attempt_window_seconds,
+        lockout_seconds=settings.control_auth_lockout_seconds,
     )
 )
 _last_terminate_request_monotonic = 0.0
@@ -96,6 +100,16 @@ def _extract_token(auth_header: str | None, x_control_token: str | None) -> str:
     if auth_header and auth_header.lower().startswith("bearer "):
         return auth_header[7:].strip()
     return ""
+
+
+def _client_identity(request: Request, x_forwarded_for: str | None) -> str:
+    if x_forwarded_for:
+        first = x_forwarded_for.split(",", 1)[0].strip()
+        if first:
+            return first
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
 
 
 def _seconds_since_iso(value: str) -> float | None:
@@ -290,12 +304,20 @@ def api_control_features(
 
 
 @app.post("/api/control/auth/login")
-def api_control_auth_login(body: ControlAuthLoginRequest) -> JSONResponse:
+def api_control_auth_login(
+    body: ControlAuthLoginRequest,
+    request: Request,
+    x_forwarded_for: str | None = Header(default=None),
+) -> JSONResponse:
     if not control_auth_service.enabled:
         raise HTTPException(status_code=400, detail="Control auth is not configured")
 
     try:
-        session_token = control_auth_service.authenticate(body.username, body.password)
+        session_token = control_auth_service.authenticate(
+            body.username,
+            body.password,
+            client_id=_client_identity(request, x_forwarded_for),
+        )
     except ControlAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

@@ -137,8 +137,14 @@ Environment variables:
 - PORTAL_CONTROL_ALLOWED_ACTIONS default: refresh_snapshot,sample_history,terminate_head_session
 - PORTAL_CONTROL_AUTH_USERNAME default: empty (when set with password, enables session auth mode)
 - PORTAL_CONTROL_AUTH_PASSWORD default: empty
+- PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (preferred; format `pbkdf2_sha256$iterations$salt_b64$digest_b64`)
+- PORTAL_CONTROL_AUTH_SECRET_ID default: empty (when set, auth credentials are loaded from AWS Secrets Manager)
+- PORTAL_CONTROL_AUTH_SECRET_REGION default: empty (optional region override for secret lookup)
 - PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS default: 3600
 - PORTAL_CONTROL_AUTH_MAX_SESSIONS default: 256
+- PORTAL_CONTROL_AUTH_MAX_FAILED_ATTEMPTS default: 5
+- PORTAL_CONTROL_AUTH_FAILED_ATTEMPT_WINDOW_SECONDS default: 300
+- PORTAL_CONTROL_AUTH_LOCKOUT_SECONDS default: 300
 - PORTAL_CONTROL_TERMINATE_COMMAND default: empty (optional command template)
 - PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET default: empty
 - PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET default: empty
@@ -150,12 +156,33 @@ Environment variables:
 
 Control auth defaults:
 - There is no built-in default username/password. Both values default to empty.
-- Session auth mode is enabled only when both `PORTAL_CONTROL_AUTH_USERNAME` and `PORTAL_CONTROL_AUTH_PASSWORD` are set.
+- Session auth mode is enabled when `PORTAL_CONTROL_AUTH_USERNAME` is set and either `PORTAL_CONTROL_AUTH_PASSWORD` or `PORTAL_CONTROL_AUTH_PASSWORD_HASH` is set.
+- Hash mode is preferred over plaintext password mode.
+- If `PORTAL_CONTROL_AUTH_SECRET_ID` is set, secret values override auth username/password/password-hash env vars.
 
 Secret storage guidance:
 - Local development: keep control auth credentials in `openvpn_portal/.env` (do not commit).
 - EC2 service mode: keep credentials in deploy-managed `.env.tcp` / `.env.udp` with restricted file permissions.
 - CI/CD: pass credentials through secret references only (for example `${{ secrets.PORTAL_CONTROL_AUTH_USERNAME }}` and `${{ secrets.PORTAL_CONTROL_AUTH_PASSWORD }}`).
+- Recommended production mode: set `PORTAL_CONTROL_AUTH_SECRET_ID` and store auth payload in AWS Secrets Manager JSON:
+   - `username`
+   - `password_hash` (preferred)
+   - `password` (legacy fallback)
+
+Generate a PBKDF2 auth hash (recommended):
+
+```bash
+python3 - <<'PY'
+import base64, hashlib, os
+password = "<your-strong-password>".encode("utf-8")
+salt = os.urandom(16)
+iterations = 390000
+digest = hashlib.pbkdf2_hmac("sha256", password, salt, iterations)
+print(f"pbkdf2_sha256${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}")
+PY
+```
+
+Then set `PORTAL_CONTROL_AUTH_PASSWORD_HASH` to that value and leave `PORTAL_CONTROL_AUTH_PASSWORD` empty.
 
 ## Notes for your existing deployment
 

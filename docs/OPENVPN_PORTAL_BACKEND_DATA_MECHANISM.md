@@ -13,7 +13,8 @@ Related diagram:
 - `load_settings()` reads env vars for status files, history DB, live polling, device hints, and control options.
 - Key behavior:
   - `OPENVPN_STATUS_FILES` is preferred over `OPENVPN_STATUS_FILE`.
-  - Control auth session mode is enabled when both `PORTAL_CONTROL_AUTH_USERNAME` and `PORTAL_CONTROL_AUTH_PASSWORD` are configured.
+  - If `PORTAL_CONTROL_AUTH_SECRET_ID` is configured, control auth credentials are loaded from AWS Secrets Manager JSON payload.
+  - Control auth session mode is enabled when username is present and either password or password-hash is configured.
   - Legacy feature-flag/token mode is used only when auth-session credentials are not configured.
 
 Primary code:

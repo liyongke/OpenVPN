@@ -79,6 +79,7 @@ Workflow: `.github/workflows/deploy-openvpn.yml`
 What it does:
 - Validates Python, shell scripts, and Terraform on pull requests.
 - Packages `openvpn_portal/` on `main` and uploads a release artifact to S3.
+- Applies Terraform secret container resource (`terraform_deploy`) before EC2 deployment on push/manual deploy runs.
 - Runs staged deployment jobs on `main` (or manual dispatch):
   - `Deploy to EC2`: submits the deployment SSM command.
   - `SSM Deployment Check`: waits for command completion and captures invocation output.
@@ -95,15 +96,22 @@ Required GitHub settings:
 - Repository secret `AWS_ROLE_TO_ASSUME` (OIDC IAM role ARN).
 - Repository secret `AWS_ROLE_TO_ASSUME_DEV` (OIDC IAM role ARN for non-main test branches).
 - Repository secret `ARTIFACT_S3_URI` (S3 prefix, for example `s3://<bucket>/<prefix>`).
+- Repository secret `PORTAL_CONTROL_AUTH_SECRET_ID` (Secrets Manager secret name or ARN used by portal services).
 - Repository variable `AWS_REGION` (optional, defaults to `ap-southeast-1`).
+
+Secret value management:
+- Terraform workflow creates/ensures the Secrets Manager container only.
+- Store and rotate secret JSON value directly in AWS Secrets Manager to avoid CI/Terraform overwriting credential rotations.
 
 Terraform can create the OIDC deploy role for this workflow. After apply, set the secret from Terraform output:
 
 ```bash
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
 DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
+PORTAL_AUTH_SECRET_ID="$(terraform -chdir=infrastructure output -raw portal_control_auth_secret_name)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
 gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
+gh secret set PORTAL_CONTROL_AUTH_SECRET_ID --body "$PORTAL_AUTH_SECRET_ID"
 ```
 
 Manual dispatch inputs:

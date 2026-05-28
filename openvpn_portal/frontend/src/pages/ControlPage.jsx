@@ -237,6 +237,7 @@ export function ControlPage() {
   const isUnlocked = Boolean(features.enabled);
   const operationsState =
     features.enabled ? "enabled" : features.control_available && features.auth_required ? "locked" : "disabled";
+  const canSubmitAuth = !authBusy && authUsername.trim() && authPassword;
 
   return (
     <section className="panel control-placeholder">
@@ -267,55 +268,6 @@ export function ControlPage() {
         </button>
         <p className="sub control-sub-full">Feature-flagged operations require authentication and are disabled by default.</p>
       </div>
-
-      {authOpen ? (
-        <article className="control-auth-panel" aria-label="Control authentication panel">
-          <h3>Control Authentication</h3>
-          <label className="control-label" htmlFor="control-auth-username">
-            Username
-          </label>
-          <input
-            id="control-auth-username"
-            className="control-input"
-            type="text"
-            autoComplete="username"
-            placeholder="Enter control username"
-            value={authUsername}
-            onChange={(event) => setAuthUsername(event.target.value)}
-          />
-          <label className="control-label" htmlFor="control-auth-password">
-            Password
-          </label>
-          <input
-            id="control-auth-password"
-            className="control-input"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Enter control password"
-            value={authPassword}
-            onChange={(event) => setAuthPassword(event.target.value)}
-          />
-          <div className="control-auth-actions">
-            <button
-              type="button"
-              className="control-button"
-              disabled={authBusy || !authUsername.trim() || !authPassword}
-              onClick={login}
-            >
-              {authBusy ? "Authorizing..." : "Authorize"}
-            </button>
-            <button
-              type="button"
-              className="control-button"
-              disabled={authBusy || !controlToken.trim()}
-              onClick={logout}
-            >
-              Lock
-            </button>
-          </div>
-          {authMessage ? <p className="control-result">{authMessage}</p> : null}
-        </article>
-      ) : null}
 
       <div className="control-grid">
         <article className="control-card">
@@ -350,6 +302,38 @@ export function ControlPage() {
 
         <article className="control-card">
           <h3>Actions</h3>
+          <div className="control-token-panel" aria-label="Control token section">
+            <label className="control-label" htmlFor="control-token-input">
+              Control Token
+            </label>
+            <input
+              id="control-token-input"
+              className="control-input"
+              type="password"
+              autoComplete="off"
+              placeholder="Paste session token or legacy token"
+              value={controlToken}
+              onChange={(event) => setControlToken(event.target.value)}
+            />
+            <div className="control-auth-actions">
+              <button
+                type="button"
+                className="control-button"
+                onClick={() => setAuthOpen(true)}
+              >
+                Open Auth Popup
+              </button>
+              <button
+                type="button"
+                className="control-button"
+                disabled={!controlToken.trim()}
+                onClick={logout}
+              >
+                Clear Token
+              </button>
+            </div>
+            <p className="hint">In auth mode, login fills this token automatically. In legacy mode, paste the configured token.</p>
+          </div>
           <div className="control-actions">
             <button
               type="button"
@@ -455,6 +439,68 @@ export function ControlPage() {
           <p className="hint">Hover markers for quick geo session details. Location is IP-based and approximate.</p>
         </article>
       </div>
+
+      {authOpen ? (
+        <div className="control-auth-modal-backdrop" role="presentation" onClick={() => setAuthOpen(false)}>
+          <article
+            className="control-auth-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Control authentication popup"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="control-auth-modal-head">
+              <h3>Control Authentication</h3>
+              <button
+                type="button"
+                className="control-auth-close"
+                onClick={() => setAuthOpen(false)}
+                aria-label="Close authentication popup"
+              >
+                x
+              </button>
+            </div>
+            <label className="control-label" htmlFor="control-auth-username">
+              Username
+            </label>
+            <input
+              id="control-auth-username"
+              className="control-input"
+              type="text"
+              autoComplete="username"
+              placeholder="Enter control username"
+              value={authUsername}
+              onChange={(event) => setAuthUsername(event.target.value)}
+            />
+            <label className="control-label" htmlFor="control-auth-password">
+              Password
+            </label>
+            <input
+              id="control-auth-password"
+              className="control-input"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter control password"
+              value={authPassword}
+              onChange={(event) => setAuthPassword(event.target.value)}
+            />
+            <div className="control-auth-actions">
+              <button type="button" className="control-button" disabled={!canSubmitAuth} onClick={login}>
+                {authBusy ? "Authorizing..." : "Authorize"}
+              </button>
+              <button
+                type="button"
+                className="control-button"
+                disabled={authBusy || !controlToken.trim()}
+                onClick={logout}
+              >
+                Lock
+              </button>
+            </div>
+            {authMessage ? <p className="control-result">{authMessage}</p> : null}
+          </article>
+        </div>
+      ) : null}
     </section>
   );
 }

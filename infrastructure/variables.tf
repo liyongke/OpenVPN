@@ -105,3 +105,21 @@ variable "github_oidc_dev_branch_pattern" {
   type        = string
   default     = "dev/*"
 }
+
+variable "enable_portal_auth_secret" {
+  description = "Create AWS Secrets Manager secret for portal control auth credentials"
+  type        = bool
+  default     = false
+}
+
+variable "portal_auth_secret_name" {
+  description = "Secrets Manager secret name used by portal runtime for control auth"
+  type        = string
+  default     = "openvpn/portal/control-auth"
+}
+
+variable "portal_auth_secret_recovery_window_days" {
+  description = "Recovery window when deleting portal auth secret"
+  type        = number
+  default     = 7
+}

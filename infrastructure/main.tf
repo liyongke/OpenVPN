@@ -88,6 +88,17 @@ locals {
   github_oidc_provider_arn = aws_iam_openid_connect_provider.github_actions.arn
 }
 
+resource "aws_secretsmanager_secret" "portal_control_auth" {
+  count                   = var.enable_portal_auth_secret ? 1 : 0
+  name                    = var.portal_auth_secret_name
+  recovery_window_in_days = var.portal_auth_secret_recovery_window_days
+
+  tags = {
+    Name        = "openvpn-portal-control-auth"
+    Application = "openvpn-portal"
+  }
+}
+
 resource "aws_key_pair" "openvpn_key" {
   key_name   = "OpenVPNKey"
   public_key = fileexists("${path.module}/openvpn-key.pub") ? file("${path.module}/openvpn-key.pub") : file("${path.module}/../keys/openvpn-key.pub")

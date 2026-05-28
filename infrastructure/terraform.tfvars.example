@@ -9,3 +9,8 @@ portal_admin_cidrs    = ["<your-public-ip>/32"]
 # monthly_budget_limit_usd       = 10
 # budget_alert_threshold_percent = 80
 # budget_alert_email             = "you@example.com"
+
+# Portal control auth secret (recommended)
+# enable_portal_auth_secret = true
+# portal_auth_secret_name = "openvpn/portal/control-auth"
+# Secret value is intentionally managed outside Terraform to avoid overwriting manual rotations.

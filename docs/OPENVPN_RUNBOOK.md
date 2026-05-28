@@ -151,7 +151,7 @@ Repository workflow: `.github/workflows/deploy-openvpn.yml`
 
 Pipeline behavior:
 1. Pull requests to `main`: validation only (Python compile, `bash -n`, Terraform validate).
-2. Push to `main`: validate, package `openvpn_portal/`, upload artifact to S3, and execute staged deploy jobs.
+2. Push to `main`: validate, run Terraform secret-container deploy stage, package `openvpn_portal/`, upload artifact to S3, and execute staged deploy jobs.
 3. Workflow dispatch: optional manual deploy with `instance_id` and `artifact_s3_uri` overrides.
 4. `Deploy to EC2` resolves `artifact_s3_uri` in-job from secret/input, fails fast if empty, and submits SSM deploy command.
 5. `SSM Deployment Check` polls command status and always fetches invocation output on failure.
@@ -162,7 +162,12 @@ Required GitHub configuration:
 - Secret: `AWS_ROLE_TO_ASSUME` (IAM role for GitHub OIDC).
 - Secret: `AWS_ROLE_TO_ASSUME_DEV` (IAM role for GitHub OIDC on non-main test branches).
 - Secret: `ARTIFACT_S3_URI` (artifact prefix `s3://<bucket>/<path>`).
+- Secret: `PORTAL_CONTROL_AUTH_SECRET_ID` (Secrets Manager secret name or ARN consumed by portal services at runtime).
 - Variable: `AWS_REGION` (optional; default `ap-southeast-1`).
+
+Secret value handling policy:
+- Terraform deploy stage manages only the Secrets Manager container resource.
+- Update/rotate actual portal auth credential JSON directly in AWS Secrets Manager so CI/Terraform does not overwrite manual rotations.
 
 OIDC role bootstrap via Terraform:
 
@@ -170,8 +175,10 @@ OIDC role bootstrap via Terraform:
 terraform -chdir=infrastructure apply
 ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_role_arn)"
 DEV_ROLE_ARN="$(terraform -chdir=infrastructure output -raw github_actions_oidc_dev_role_arn)"
+PORTAL_AUTH_SECRET_ID="$(terraform -chdir=infrastructure output -raw portal_control_auth_secret_name)"
 gh secret set AWS_ROLE_TO_ASSUME --body "$ROLE_ARN"
 gh secret set AWS_ROLE_TO_ASSUME_DEV --body "$DEV_ROLE_ARN"
+gh secret set PORTAL_CONTROL_AUTH_SECRET_ID --body "$PORTAL_AUTH_SECRET_ID"
 ```
 
 Post-deploy checks executed by workflow:

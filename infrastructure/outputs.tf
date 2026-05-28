@@ -67,3 +67,13 @@ output "portal_vpn_udp_url" {
   description = "VPN-only portal URL for UDP clients (tun0 network)"
   value       = "http://10.8.0.1:8088"
 }
+
+output "portal_control_auth_secret_arn" {
+  description = "Secrets Manager ARN for portal control authentication"
+  value       = var.enable_portal_auth_secret ? aws_secretsmanager_secret.portal_control_auth[0].arn : null
+}
+
+output "portal_control_auth_secret_name" {
+  description = "Secrets Manager name for portal control authentication"
+  value       = var.enable_portal_auth_secret ? aws_secretsmanager_secret.portal_control_auth[0].name : null
+}

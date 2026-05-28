@@ -174,10 +174,73 @@ jobs:
         run: |
           aws s3 cp "${{ steps.meta.outputs.artifact_name }}" "${{ steps.meta.outputs.artifact_s3_uri }}"
 
+  terraform_deploy:
+    name: Terraform Deploy (Secret Container)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve OIDC role for branch
+        id: oidc_role
+        shell: bash
+        env:
+          ROLE_MAIN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          ROLE_DEV: ${{ secrets.AWS_ROLE_TO_ASSUME_DEV }}
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH" == "main" ]]; then
+            ROLE="${ROLE_MAIN}"
+            ROLE_LABEL="prod (main)"
+          else
+            ROLE="${ROLE_DEV}"
+            ROLE_LABEL="dev ($BRANCH)"
+          fi
+          if [[ -z "$ROLE" ]]; then
+            echo "ERROR: Missing OIDC role secret for $ROLE_LABEL. Set AWS_ROLE_TO_ASSUME (main) or AWS_ROLE_TO_ASSUME_DEV (dev/*)." >&2
+            exit 1
+          fi
+          echo "role=$ROLE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.oidc_role.outputs.role }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init (backend)
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=infrastructure init -reconfigure -backend-config=backend.hcl
+
+      - name: Terraform apply secret resources
+        shell: bash
+        env:
+          TF_VAR_enable_portal_auth_secret: "true"
+        run: |
+          set -euo pipefail
+          terraform -chdir=infrastructure plan -no-color \
+            -target=aws_secretsmanager_secret.portal_control_auth \
+            -out=tfplan-secrets
+          terraform -chdir=infrastructure apply -auto-approve tfplan-secrets
+
   deploy_ec2_actual:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    needs: package
+    needs:
+      - package
+      - terraform_deploy
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy == 'true')
@@ -261,6 +324,7 @@ jobs:
           INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
           ARTIFACT_S3_URI: ${{ steps.deploy_meta.outputs.artifact_s3_uri }}
           APP_DIR: ${{ env.APP_DIR }}
+          PORTAL_CONTROL_AUTH_SECRET_ID: ${{ secrets.PORTAL_CONTROL_AUTH_SECRET_ID }}
         run: |
           set -euo pipefail
 
@@ -363,11 +427,31 @@ jobs:
 
           chown -R ec2-user:ec2-user "$VENV_DIR" || true
 
+          AUTH_SECRET_ID="${PORTAL_CONTROL_AUTH_SECRET_ID:-}"
+
           # Always write env files so deploy-managed settings are never stale
-          printf 'PORTAL_HOST=10.9.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.tcp"
+          cat > "$APP_DIR/.env.tcp" <<ENV_TCP
+          PORTAL_HOST=10.9.0.1
+          PORTAL_PORT=8088
+          PORTAL_TITLE=VPN Portal
+          OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
+          PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+          ENV_TCP
+          if [[ -n "$AUTH_SECRET_ID" ]]; then
+            printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.tcp"
+          fi
           chown ec2-user:ec2-user "$APP_DIR/.env.tcp"
           chmod 600 "$APP_DIR/.env.tcp"
-          printf 'PORTAL_HOST=10.8.0.1\nPORTAL_PORT=8088\nPORTAL_TITLE=VPN Portal\nOPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log\nPORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3\n' > "$APP_DIR/.env.udp"
+          cat > "$APP_DIR/.env.udp" <<ENV_UDP
+          PORTAL_HOST=10.8.0.1
+          PORTAL_PORT=8088
+          PORTAL_TITLE=VPN Portal
+          OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
+          PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+          ENV_UDP
+          if [[ -n "$AUTH_SECRET_ID" ]]; then
+            printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.udp"
+          fi
           chown ec2-user:ec2-user "$APP_DIR/.env.udp"
           chmod 600 "$APP_DIR/.env.udp"
 
@@ -466,7 +550,7 @@ jobs:
           aws s3 cp /tmp/deploy_script.sh "$SCRIPT_S3_KEY"
 
           PARAMETERS_JSON="$(cat <<JSON
-          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' bash /tmp/deploy_openvpn_portal.sh"]}
+          {"commands":["aws s3 cp '${SCRIPT_S3_KEY}' /tmp/deploy_openvpn_portal.sh && APP_DIR='${APP_DIR}' ARTIFACT_S3_URI='${ARTIFACT_S3_URI}' PORTAL_CONTROL_AUTH_SECRET_ID='${PORTAL_CONTROL_AUTH_SECRET_ID}' bash /tmp/deploy_openvpn_portal.sh"]}
           JSON
           )"
 
