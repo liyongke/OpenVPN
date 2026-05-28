@@ -599,6 +599,28 @@ body {
   margin-top: 10px;
 }
 
+.source-context-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.source-context-card {
+  border: 1px solid rgba(151, 180, 225, 0.16);
+  border-radius: 10px;
+  background: rgba(9, 17, 31, 0.55);
+  padding: 10px;
+}
+
+.source-context-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #b9c9e0;
+}
+
 .source-list p {
   margin: 0;
 }
@@ -899,31 +921,30 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
+.control-access-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
 .control-token-panel {
   border: 1px solid rgba(151, 180, 225, 0.16);
   border-radius: 10px;
   background: rgba(9, 17, 31, 0.58);
   padding: 10px;
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 .control-token-panel-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
 }
 
-.control-token-panel-head h4 {
-  margin: 0 0 4px;
-  color: var(--brand-strong);
-  font-size: 0.88rem;
-}
-
-.control-token-panel-head .hint {
+.control-token-panel-head .control-label {
   margin: 0;
-  max-width: 34ch;
 }
 
 .control-token-clear {
@@ -1331,5 +1352,9 @@ tbody tr:hover {
   th,
   td {
     padding: 8px 9px;
+  }
+
+  .source-context-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -16,6 +16,7 @@ const DEFAULT_FEATURES = {
   enabled: false,
   control_available: false,
   auth_required: true,
+  auth_mode: "feature_flag",
   allowed_actions: [],
 };
 
@@ -202,6 +203,10 @@ export function ControlPage() {
   };
 
   const login = async () => {
+    if (features.auth_mode !== "userpass_session") {
+      setAuthMessage("Username/password auth is not enabled in this environment. Use the Control Token field.");
+      return;
+    }
     setAuthBusy(true);
     setAuthMessage("");
     try {
@@ -238,10 +243,11 @@ export function ControlPage() {
   };
 
   const showAuthOptional = !features.auth_required && features.auth_mode !== "userpass_session";
+  const canUseSessionAuth = features.auth_mode === "userpass_session";
   const isUnlocked = Boolean(features.enabled);
   const operationsState =
     features.enabled ? "enabled" : features.control_available && features.auth_required ? "locked" : "disabled";
-  const canSubmitAuth = !authBusy && authUsername.trim() && authPassword;
+  const canSubmitAuth = canUseSessionAuth && !authBusy && authUsername.trim() && authPassword;
 
   return (
     <section className="panel control-placeholder">
@@ -337,12 +343,29 @@ export function ControlPage() {
               {showAuthOptional ? "Control API is in legacy mode and currently disabled by backend feature flag." : "Use the lock icon to authenticate and unlock control actions."}
             </p>
           ) : null}
+          {result ? <p className="control-result">{result}</p> : null}
+        </article>
+
+        <article className="control-card control-access-card">
+          <h3>Access & Session</h3>
+          <div className="chip-row monitor-chip-row" aria-label="Control authentication state">
+            <span className="chip">
+              Mode <strong>{canUseSessionAuth ? "user/pass session" : features.auth_mode || "legacy"}</strong>
+            </span>
+            <span className="chip">
+              Session <strong>{controlToken.trim() ? "present" : "empty"}</strong>
+            </span>
+          </div>
+          <p className="hint">
+            {canUseSessionAuth
+              ? "Use the lock icon to sign in. Session token is filled automatically and can be cleared here."
+              : "This environment uses legacy or feature-flag mode. Paste a control token here only when needed."}
+          </p>
           <div className="control-token-panel" aria-label="Control token section">
             <div className="control-token-panel-head">
-              <div>
-                <h4>Session Token</h4>
-                <p className="hint">Filled automatically after login. You can also paste a legacy token here when auth is optional.</p>
-              </div>
+              <label className="control-label" htmlFor="control-token-input">
+                Control Token
+              </label>
               <button
                 type="button"
                 className="control-button control-token-clear"
@@ -352,9 +375,6 @@ export function ControlPage() {
                 Clear
               </button>
             </div>
-            <label className="control-label" htmlFor="control-token-input">
-              Control Token
-            </label>
             <input
               id="control-token-input"
               className="control-input"
@@ -365,7 +385,6 @@ export function ControlPage() {
               onChange={(event) => setControlToken(event.target.value)}
             />
           </div>
-          {result ? <p className="control-result">{result}</p> : null}
         </article>
 
         <article className="control-card map-card map-card-bottom">
@@ -460,43 +479,63 @@ export function ControlPage() {
                 x
               </button>
             </div>
-            <label className="control-label" htmlFor="control-auth-username">
-              Username
-            </label>
-            <input
-              id="control-auth-username"
-              className="control-input"
-              type="text"
-              autoComplete="username"
-              placeholder="Enter control username"
-              value={authUsername}
-              onChange={(event) => setAuthUsername(event.target.value)}
-            />
-            <label className="control-label" htmlFor="control-auth-password">
-              Password
-            </label>
-            <input
-              id="control-auth-password"
-              className="control-input"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Enter control password"
-              value={authPassword}
-              onChange={(event) => setAuthPassword(event.target.value)}
-            />
-            <div className="control-auth-actions">
-              <button type="button" className="control-button" disabled={!canSubmitAuth} onClick={login}>
-                {authBusy ? "Authorizing..." : "Authorize"}
-              </button>
-              <button
-                type="button"
-                className="control-button"
-                disabled={authBusy || !controlToken.trim()}
-                onClick={logout}
-              >
-                Lock
-              </button>
-            </div>
+            {canUseSessionAuth ? (
+              <>
+                <label className="control-label" htmlFor="control-auth-username">
+                  Username
+                </label>
+                <input
+                  id="control-auth-username"
+                  className="control-input"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Enter control username"
+                  value={authUsername}
+                  onChange={(event) => setAuthUsername(event.target.value)}
+                />
+                <label className="control-label" htmlFor="control-auth-password">
+                  Password
+                </label>
+                <input
+                  id="control-auth-password"
+                  className="control-input"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter control password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                />
+                <div className="control-auth-actions">
+                  <button type="button" className="control-button" disabled={!canSubmitAuth} onClick={login}>
+                    {authBusy ? "Authorizing..." : "Authorize"}
+                  </button>
+                  <button
+                    type="button"
+                    className="control-button"
+                    disabled={authBusy || !controlToken.trim()}
+                    onClick={logout}
+                  >
+                    Lock
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="hint">
+                  Username/password auth is not configured on this backend. Use the Control Token field in Access & Session when running legacy mode.
+                </p>
+                <div className="control-auth-actions">
+                  <button
+                    type="button"
+                    className="control-button"
+                    disabled={authBusy || !controlToken.trim()}
+                    onClick={logout}
+                  >
+                    Lock
+                  </button>
+                </div>
+              </>
+            )}
             {authMessage ? <p className="control-result">{authMessage}</p> : null}
           </article>
         </div>

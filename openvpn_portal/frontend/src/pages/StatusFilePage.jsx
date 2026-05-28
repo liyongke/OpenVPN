@@ -57,6 +57,33 @@ function identityForSession(session) {
   return String(session?.username || session?.common_name || "").trim();
 }
 
+function parseModeLabel(mode) {
+  const key = String(mode || "").trim().toLowerCase();
+  if (key === "csv_v3") {
+    return "CSV v3";
+  }
+  if (key === "legacy") {
+    return "Legacy";
+  }
+  if (key === "none") {
+    return "None";
+  }
+  return key || "n/a";
+}
+
+function sessionFilterLabel(filter) {
+  if (filter === "trusted") {
+    return "trusted";
+  }
+  if (filter === "suspect") {
+    return "suspect";
+  }
+  if (filter === "duplicate") {
+    return "duplicate identity";
+  }
+  return "all sessions";
+}
+
 export function StatusFilePage() {
   const [searchParams] = useSearchParams();
   const selectedFile = searchParams.get("file") || "";
@@ -458,19 +485,41 @@ export function StatusFilePage() {
             </Link>
           </span>
         </div>
-        <p className="hint">
-          Status files in use: TCP and UDP are live server snapshots; <strong>{statusData.device_hints_file?.path || "device hints"}</strong>{" "}
-          is metadata from client-connect that enriches device/platform labels.
-        </p>
-        <p className="source-meta">
-          Parser mode={selectedParseDiagnostics.parse_mode || "n/a"} | parsed={safeNumber(selectedParseDiagnostics.client_rows_parsed, 0)}
-          /{safeNumber(selectedParseDiagnostics.client_rows_seen, 0)} | skipped={safeNumber(selectedParseDiagnostics.client_rows_skipped, 0)}
-        </p>
-        {selectedInferenceEntries.length ? (
-          <p className="source-meta">
-            Device inference: {selectedInferenceEntries.map(([key, count]) => `${key}=${count}`).join(" | ")}
-          </p>
-        ) : null}
+        <div className="source-context-grid" aria-label="Selected source parsing and metadata">
+          <article className="source-context-card">
+            <h3>Status Inputs</h3>
+            <p className="source-meta">
+              TCP/UDP status files are live server snapshots. <strong>{statusData.device_hints_file?.path || "device hints"}</strong> is
+              client-connect metadata used for device/platform enrichment.
+            </p>
+            {selectedInferenceEntries.length ? (
+              <p className="source-meta">
+                Device inference: {selectedInferenceEntries.map(([key, count]) => `${key}=${count}`).join(" | ")}
+              </p>
+            ) : null}
+          </article>
+          <article className="source-context-card">
+            <h3>Parsing</h3>
+            <div className="chip-row" aria-label="Selected parser diagnostics">
+              <span className="chip">
+                Mode <strong>{parseModeLabel(selectedParseDiagnostics.parse_mode)}</strong>
+              </span>
+              <span className="chip">
+                Parsed <strong>{safeNumber(selectedParseDiagnostics.client_rows_parsed, 0)}</strong>/{safeNumber(selectedParseDiagnostics.client_rows_seen, 0)}
+              </span>
+              <span className="chip">
+                Skipped <strong>{safeNumber(selectedParseDiagnostics.client_rows_skipped, 0)}</strong>
+              </span>
+            </div>
+            {Object.keys(selectedParseDiagnostics.skip_reasons || {}).length ? (
+              <p className="source-meta">
+                Skip reasons: {Object.entries(selectedParseDiagnostics.skip_reasons)
+                  .map(([reason, count]) => `${reason}=${count}`)
+                  .join(" | ")}
+              </p>
+            ) : null}
+          </article>
+        </div>
 
         {filteredSources.length ? (
           <>
@@ -527,28 +576,7 @@ export function StatusFilePage() {
                         <p className="source-meta">
                           panel refresh age: {generatedAgeSeconds === null ? "n/a" : `${generatedAgeSeconds.toFixed(1)}s`}
                         </p>
-                        <div className="chip-row" aria-label={`Source panel filters ${sourcePath}`}>
-                          <span className={`chip ${sessionClassFilter === "all" ? "is-active" : ""}`}>
-                            <Link className="chip-link" to={buildStatusFileLink({ file: sourcePath, sessionClass: "all" })}>
-                              all
-                            </Link>
-                          </span>
-                          <span className={`chip ${sessionClassFilter === "trusted" ? "is-active" : ""}`}>
-                            <Link className="chip-link" to={buildStatusFileLink({ file: sourcePath, sessionClass: "trusted" })}>
-                              trusted
-                            </Link>
-                          </span>
-                          <span className={`chip ${sessionClassFilter === "suspect" ? "is-active" : ""}`}>
-                            <Link className="chip-link" to={buildStatusFileLink({ file: sourcePath, sessionClass: "suspect" })}>
-                              suspect
-                            </Link>
-                          </span>
-                          <span className={`chip ${sessionClassFilter === "duplicate" ? "is-active" : ""}`}>
-                            <Link className="chip-link" to={buildStatusFileLink({ file: sourcePath, sessionClass: "duplicate" })}>
-                              duplicate identity
-                            </Link>
-                          </span>
-                        </div>
+                        <p className="source-meta">Active session filter: {sessionFilterLabel(sessionClassFilter)} (set above).</p>
                         <p className="source-meta">
                           parser={parseDiagnostics.parse_mode || "n/a"} | parsed={safeNumber(parseDiagnostics.client_rows_parsed, 0)}/
                           {safeNumber(parseDiagnostics.client_rows_seen, 0)} | skipped={safeNumber(parseDiagnostics.client_rows_skipped, 0)}
