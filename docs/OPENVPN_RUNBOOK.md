@@ -26,7 +26,7 @@ Related docs:
 11. [Security Notes](#11-security-notes)
 12. [Fast Recovery Procedure](#12-fast-recovery-procedure)
 13. [Reusable Operations Playbook](#13-reusable-operations-playbook)
-14. [AI Skills Prompt Bank](#14-ai-skills-prompt-bank)
+14. [AI Skills Bank](#14-ai-skills-bank)
 15. [Portal Config and Data Persistence](#15-portal-config-and-data-persistence)
 
 ---
@@ -760,20 +760,19 @@ Expected dry-run output:
 
 ---
 
-## 14. AI Skills Prompt Bank
+## 14. AI Skills Bank
 
-For reusable AI operations/debugging prompts, use:
+For reusable AI operations/debugging skills, use:
 
 - [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
 - [.github/copilot-instructions.md](../.github/copilot-instructions.md)
-- [.github/prompts](../.github/prompts)
+- [.github/skills](../.github/skills)
 
-This file contains reusable prompt templates for triage, root-cause proof, safe change sequencing, drift detection, and regression guardrail extraction.
+This file contains reusable skill mappings for triage, root-cause proof, safe change sequencing, drift detection, and regression guardrail extraction.
 
 Location and usage:
-- Repository-owned prompt templates are versioned under `.github/prompts`.
-- Local one-click VS Code prompts are stored in `$HOME/Library/Application Support/Code/User/prompts`.
-- If you update one location, copy changes to the other to keep behavior consistent.
+- Repository-owned skills are versioned under `.github/skills`.
+- Add new reusable workflows as skill packs (`<skill-name>/SKILL.md`).
 
 ---
 

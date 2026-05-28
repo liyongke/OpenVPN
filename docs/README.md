@@ -9,7 +9,7 @@ This folder is the documentation index. It should route readers to the right sou
 - Portal runtime, API, and deploy behavior: [../openvpn_portal/README.md](../openvpn_portal/README.md)
 - Backend data mechanism deep dive: [OPENVPN_PORTAL_BACKEND_DATA_MECHANISM.md](OPENVPN_PORTAL_BACKEND_DATA_MECHANISM.md)
 - Deployment, troubleshooting, and recovery: [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md)
-- Reusable AI prompt workflows: [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
+- Reusable AI skill workflows: [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md)
 
 ## Documentation Hierarchy
 
@@ -19,7 +19,7 @@ This folder is the documentation index. It should route readers to the right sou
 	- [OPENVPN_RUNBOOK.md](OPENVPN_RUNBOOK.md): operational source of truth.
 	- [../openvpn_portal/README.md](../openvpn_portal/README.md): backend/frontend portal behavior and APIs.
 	- [VPN_SH_GUIDE.md](VPN_SH_GUIDE.md): client command guide only.
-	- [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md): AI operation templates.
+	- [AI_SKILLS_PROMPT_BANK.md](AI_SKILLS_PROMPT_BANK.md): AI skill mapping and usage guidance.
 - Level 3 (references):
 	- [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt): filesystem/layout snapshot.
 	- [diagrams/README.md](diagrams/README.md): diagram inventory and ownership.

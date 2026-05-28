@@ -150,7 +150,7 @@ Manual dispatch inputs:
 - I need VPN client commands: [docs/VPN_SH_GUIDE.md](docs/VPN_SH_GUIDE.md)
 - I need deployment or incident recovery steps: [docs/OPENVPN_RUNBOOK.md](docs/OPENVPN_RUNBOOK.md)
 - I need portal-specific operations: [openvpn_portal/README.md](openvpn_portal/README.md)
-- I need AI prompt workflows: [docs/AI_SKILLS_PROMPT_BANK.md](docs/AI_SKILLS_PROMPT_BANK.md)
+- I need AI skill workflows: [docs/AI_SKILLS_PROMPT_BANK.md](docs/AI_SKILLS_PROMPT_BANK.md)
 
 ## Repo Layout
 
