@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 860" role="img" aria-labelledby="title desc">
+  <title id="title">OpenVPN Portal Backend Data Mechanism</title>
+  <desc id="desc">End-to-end backend data flow from OpenVPN status files through parsing, in-memory snapshots, APIs, history, geo enrichment, and control actions.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#071423"/>
+      <stop offset="100%" stop-color="#0c1c30"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10253f" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#0e2035" stop-opacity="0.95"/>
+    </linearGradient>
+    <style>
+      .title { font: 700 28px "Avenir Next", "Segoe UI", sans-serif; fill: #e7f0ff; }
+      .subtitle { font: 500 15px "Avenir Next", "Segoe UI", sans-serif; fill: #a7bbd8; }
+      .group { fill: none; stroke: #2a4466; stroke-width: 1.4; stroke-dasharray: 6 4; }
+      .groupLabel { font: 700 14px "Avenir Next", "Segoe UI", sans-serif; fill: #9fbae0; letter-spacing: 0.03em; }
+      .node { fill: url(#panel); stroke: #3e628f; stroke-width: 1.4; rx: 12; }
+      .nodeTitle { font: 700 14px "Avenir Next", "Segoe UI", sans-serif; fill: #e7f0ff; }
+      .nodeBody { font: 500 12px "Avenir Next", "Segoe UI", sans-serif; fill: #b6c9e4; }
+      .store { fill: #0f2740; stroke: #4b7cb4; stroke-width: 1.4; }
+      .api { fill: #112944; stroke: #5a89c2; stroke-width: 1.2; rx: 9; }
+      .apiText { font: 600 12px "Avenir Next", "Segoe UI", sans-serif; fill: #dce8fb; }
+      .legendText { font: 600 12px "Avenir Next", "Segoe UI", sans-serif; fill: #c8d9ef; }
+      .arrowData { stroke: #4ea3ff; stroke-width: 2.2; fill: none; }
+      .arrowControl { stroke: #ff9d4d; stroke-width: 2.1; fill: none; stroke-dasharray: 7 4; }
+      .arrowWrite { stroke: #4ad0a8; stroke-width: 2.1; fill: none; stroke-dasharray: 5 3; }
+      .arrowRead { stroke: #56d3b5; stroke-width: 2.1; fill: none; }
+      .arrowSse { stroke: #b68cff; stroke-width: 2.1; fill: none; }
+      .labelBg { fill: #0b1a2d; opacity: 0.92; rx: 4; }
+      .labelText { font: 600 11px "Avenir Next", "Segoe UI", sans-serif; fill: #d9e7fa; }
+    </style>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4ea3ff"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ff9d4d"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4ad0a8"/>
+    </marker>
+    <marker id="arrowMint" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#56d3b5"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#b68cff"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="860" fill="url(#bg)"/>
+  <text class="title" x="36" y="44">OpenVPN Portal Backend Data Mechanism</text>
+  <text class="subtitle" x="36" y="70">Inputs -> collector/parsers -> in-memory snapshot -> API surfaces -> history/geo/control side effects</text>
+
+  <rect class="group" x="28" y="94" width="330" height="350" rx="14"/>
+  <text class="groupLabel" x="42" y="118">INPUT SOURCES</text>
+  <rect class="node" x="46" y="132" width="292" height="74"/>
+  <text class="nodeTitle" x="60" y="156">OpenVPN Status Files</text>
+  <text class="nodeBody" x="60" y="176">status-tcp.log, status-udp.log, legacy fallback</text>
+  <text class="nodeBody" x="60" y="194">Read by load_openvpn_status_multi()</text>
+  <rect class="node" x="46" y="218" width="292" height="72"/>
+  <text class="nodeTitle" x="60" y="242">Device Hints JSON</text>
+  <text class="nodeBody" x="60" y="262">real_endpoints -> real_ip -> username -> CN</text>
+  <text class="nodeBody" x="60" y="280">Shared-NAT guard avoids IP-only collisions</text>
+  <rect class="node" x="46" y="302" width="292" height="72"/>
+  <text class="nodeTitle" x="60" y="326">Control Request + Token</text>
+  <text class="nodeBody" x="60" y="346">POST /api/control/actions</text>
+  <text class="nodeBody" x="60" y="364">Feature flag and auth gate before action</text>
+
+  <rect class="group" x="386" y="94" width="470" height="528" rx="14"/>
+  <text class="groupLabel" x="402" y="118">BACKEND CORE</text>
+  <rect class="node" x="408" y="132" width="430" height="90"/>
+  <text class="nodeTitle" x="424" y="156">LiveStateCollector (poll loop)</text>
+  <text class="nodeBody" x="424" y="176">refresh_attempts/failures, payload hash diff, subscriber queues</text>
+  <text class="nodeBody" x="424" y="194">refresh_once(force_broadcast) and periodic history sampling</text>
+  <rect class="node" x="408" y="236" width="430" height="106"/>
+  <text class="nodeTitle" x="424" y="260">OpenVPN Reader Pipeline</text>
+  <text class="nodeBody" x="424" y="280">parse CSV/legacy -> normalize sessions -> audit flags/class</text>
+  <text class="nodeBody" x="424" y="298">merge multi-source sessions + status_sources + summary</text>
+  <text class="nodeBody" x="424" y="316">adds client_id, protocol, source_file, device inference</text>
+  <rect class="store" x="408" y="356" width="430" height="84" rx="12"/>
+  <text class="nodeTitle" x="424" y="380">In-Memory Latest Snapshot</text>
+  <text class="nodeBody" x="424" y="400">collector.latest_payload = status_sources + sessions + summary</text>
+  <text class="nodeBody" x="424" y="418">single source of truth for most read APIs</text>
+  <rect class="node" x="408" y="454" width="430" height="150"/>
+  <text class="nodeTitle" x="424" y="478">Control Service (terminate_head_session)</text>
+  <text class="nodeBody" x="424" y="498">target = first session row in current payload</text>
+  <text class="nodeBody" x="424" y="516">mode A: PORTAL_CONTROL_TERMINATE_COMMAND template</text>
+  <text class="nodeBody" x="424" y="534">mode B: OpenVPN management socket (client-kill -> kill real -> kill CN)</text>
+  <text class="nodeBody" x="424" y="552">on success/failure returns action result; caller refreshes snapshot</text>
+  <text class="nodeBody" x="424" y="570">explicit error paths: 401/403/404/503</text>
+
+  <rect class="group" x="884" y="94" width="368" height="528" rx="14"/>
+  <text class="groupLabel" x="900" y="118">DATA STORES &amp; ENRICHMENT</text>
+  <rect class="store" x="904" y="132" width="328" height="96" rx="12"/>
+  <text class="nodeTitle" x="920" y="156">SQLite HistoryStore</text>
+  <text class="nodeBody" x="920" y="176">table snapshots(sampled_at PK, counts, bytes, payload_json)</text>
+  <text class="nodeBody" x="920" y="194">WAL mode, retention pruning, daily aggregates</text>
+  <rect class="store" x="904" y="242" width="328" height="90" rx="12"/>
+  <text class="nodeTitle" x="920" y="266">GeoIP Cache + Provider</text>
+  <text class="nodeBody" x="920" y="286">public endpoint IP -> geo payload</text>
+  <text class="nodeBody" x="920" y="304">local GeoLite2 preferred, ipwho.is fallback</text>
+  <rect class="node" x="904" y="346" width="328" height="114"/>
+  <text class="nodeTitle" x="920" y="370">Status File Context Reader</text>
+  <text class="nodeBody" x="920" y="390">/api/status-file and /status-file fallback template</text>
+  <text class="nodeBody" x="920" y="408">select source path, tail N lines, attach source metadata</text>
+  <text class="nodeBody" x="920" y="426">returns raw_text + read_error + generated_at</text>
+
+  <rect class="group" x="28" y="632" width="1224" height="200" rx="14"/>
+  <text class="groupLabel" x="42" y="656">API SURFACES</text>
+  <rect class="api" x="48" y="674" width="192" height="50"/>
+  <text class="apiText" x="62" y="703">GET /api/sessions</text>
+  <rect class="api" x="252" y="674" width="192" height="50"/>
+  <text class="apiText" x="266" y="703">GET /api/summary</text>
+  <rect class="api" x="456" y="674" width="220" height="50"/>
+  <text class="apiText" x="470" y="703">GET /api/live/summary</text>
+  <rect class="api" x="688" y="674" width="246" height="50"/>
+  <text class="apiText" x="702" y="703">GET /api/live/sessions (SSE)</text>
+  <rect class="api" x="946" y="674" width="286" height="50"/>
+  <text class="apiText" x="960" y="703">GET /api/portal/status + /api/monitoring/backend</text>
+  <rect class="api" x="48" y="736" width="274" height="50"/>
+  <text class="apiText" x="62" y="765">GET /api/history/7d (from SQLite)</text>
+  <rect class="api" x="334" y="736" width="274" height="50"/>
+  <text class="apiText" x="348" y="765">GET /api/map/sessions (geo enriched)</text>
+  <rect class="api" x="620" y="736" width="274" height="50"/>
+  <text class="apiText" x="634" y="765">GET /api/status-file (raw tail)</text>
+  <rect class="api" x="906" y="736" width="326" height="50"/>
+  <text class="apiText" x="920" y="765">POST /api/control/actions + GET /api/control/features</text>
+
+  <path class="arrowData" d="M338 168 L408 168" marker-end="url(#arrowBlue)"/>
+  <rect class="labelBg" x="350" y="148" width="44" height="16"/>
+  <text class="labelText" x="356" y="160">poll</text>
+
+  <path class="arrowData" d="M338 252 L408 288" marker-end="url(#arrowBlue)"/>
+  <rect class="labelBg" x="344" y="235" width="84" height="16"/>
+  <text class="labelText" x="350" y="247">hint match</text>
+
+  <path class="arrowData" d="M622 222 L622 236" marker-end="url(#arrowBlue)"/>
+  <path class="arrowData" d="M622 342 L622 356" marker-end="url(#arrowBlue)"/>
+  <rect class="labelBg" x="565" y="328" width="112" height="16"/>
+  <text class="labelText" x="571" y="340">normalized payload</text>
+
+  <path class="arrowWrite" d="M838 394 L904 180" marker-end="url(#arrowGreen)"/>
+  <rect class="labelBg" x="838" y="268" width="82" height="16"/>
+  <text class="labelText" x="844" y="280">sample/prune</text>
+
+  <path class="arrowRead" d="M904 286 L838 286" marker-end="url(#arrowMint)"/>
+  <rect class="labelBg" x="847" y="266" width="47" height="16"/>
+  <text class="labelText" x="853" y="278">geo</text>
+
+  <path class="arrowControl" d="M338 338 L408 512" marker-end="url(#arrowOrange)"/>
+  <rect class="labelBg" x="326" y="438" width="104" height="16"/>
+  <text class="labelText" x="332" y="450">terminate action</text>
+
+  <path class="arrowControl" d="M838 528 C 896 528, 896 528, 904 528" marker-end="url(#arrowOrange)"/>
+  <rect class="labelBg" x="856" y="508" width="74" height="16"/>
+  <text class="labelText" x="862" y="520">socket/cmd</text>
+
+  <path class="arrowData" d="M622 440 L622 674" marker-end="url(#arrowBlue)"/>
+  <rect class="labelBg" x="576" y="612" width="92" height="16"/>
+  <text class="labelText" x="582" y="624">read APIs</text>
+
+  <path class="arrowSse" d="M650 440 C 760 500, 770 615, 796 674" marker-end="url(#arrowPurple)"/>
+  <rect class="labelBg" x="742" y="602" width="90" height="16"/>
+  <text class="labelText" x="748" y="614">SSE snapshot</text>
+
+  <path class="arrowRead" d="M1068 228 L1068 736" marker-end="url(#arrowMint)"/>
+  <rect class="labelBg" x="1020" y="472" width="96" height="16"/>
+  <text class="labelText" x="1026" y="484">history API</text>
+
+  <path class="arrowRead" d="M1010 332 L470 736" marker-end="url(#arrowMint)"/>
+  <rect class="labelBg" x="690" y="540" width="82" height="16"/>
+  <text class="labelText" x="696" y="552">map API</text>
+
+  <path class="arrowRead" d="M1068 460 L748 736" marker-end="url(#arrowMint)"/>
+  <rect class="labelBg" x="892" y="610" width="90" height="16"/>
+  <text class="labelText" x="898" y="622">status tail</text>
+
+  <rect x="28" y="812" width="760" height="34" rx="8" fill="#0b1c31" stroke="#26456b"/>
+  <line x1="46" y1="829" x2="82" y2="829" class="arrowData"/>
+  <text class="legendText" x="88" y="833">Primary data flow</text>
+  <line x1="226" y1="829" x2="262" y2="829" class="arrowControl"/>
+  <text class="legendText" x="268" y="833">Control/action path</text>
+  <line x1="418" y1="829" x2="454" y2="829" class="arrowWrite"/>
+  <text class="legendText" x="460" y="833">History write flow</text>
+  <line x1="594" y1="829" x2="630" y2="829" class="arrowRead"/>
+  <text class="legendText" x="636" y="833">Read/enrichment flow</text>
+  <line x1="782" y1="829" x2="818" y2="829" class="arrowSse"/>
+  <text class="legendText" x="824" y="833">SSE broadcast flow</text>
+
+</svg>

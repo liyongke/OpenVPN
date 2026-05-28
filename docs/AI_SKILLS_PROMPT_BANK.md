@@ -35,6 +35,7 @@ Prompt file mapping (.github/prompts):
 - Skill 14: openvpn-service-vs-local-deps.prompt.md
 - Skill 15: openvpn-portal-env-persistence.prompt.md
 - Skill 16: openvpn-peak-session-spike-audit.prompt.md
+- Skill 17: openvpn-control-action-safe-terminate.prompt.md
 
 ---
 
@@ -381,6 +382,33 @@ Expected output:
 - Snapshot evidence table
 - Trusted vs suspect distribution summary
 - Journal correlation findings
+
+---
+
+## Skill 17: Safe Head-Session Termination Control
+
+When to use:
+- You need to force-terminate the first Active Sessions row from the portal.
+- You need to verify control-token auth and management-socket wiring before production use.
+
+Prompt template:
+
+```text
+Validate and execute a safe head-session termination through portal control API:
+1. Confirm PORTAL_CONTROL_ENABLED=1 and allowed action includes terminate_head_session.
+2. Verify auth behavior with and without token (expect 401 when token required).
+3. Confirm termination backend path:
+   - management sockets set (TCP/UDP), or
+   - custom PORTAL_CONTROL_TERMINATE_COMMAND renders correctly.
+4. Call POST /api/control/actions with action=terminate_head_session.
+5. Validate that the terminated session matches the pre-action first row and snapshot refresh reflects the change.
+Return: exact commands, expected pass/fail output, rollback notes if termination path is misconfigured.
+```
+
+Expected output:
+- Control-path preflight checklist
+- Action execution and validation steps
+- Misconfiguration rollback notes
 
 ---
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getHistory7d, getLiveSummary, subscribeLiveSessions } from "../api/client";
+import { getControlFeatures, getHistory7d, getLiveSummary, runControlAction, subscribeLiveSessions } from "../api/client";
 
 const portalIconUrl = "/static/openvpn-icon.svg";
 
@@ -22,6 +22,12 @@ const EMPTY_SNAPSHOT = {
   status_exists: false,
   updated_at: "n/a",
   generated_at: "n/a",
+};
+
+const EMPTY_CONTROL_FEATURES = {
+  enabled: false,
+  auth_required: true,
+  allowed_actions: [],
 };
 
 function HistoryChart({ days }) {
@@ -117,6 +123,10 @@ export function DashboardPage() {
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
   const [historyDays, setHistoryDays] = useState([]);
   const [historyError, setHistoryError] = useState(false);
+  const [controlFeatures, setControlFeatures] = useState(EMPTY_CONTROL_FEATURES);
+  const [terminateToken, setTerminateToken] = useState("");
+  const [terminateLoading, setTerminateLoading] = useState(false);
+  const [terminateResult, setTerminateResult] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -130,6 +140,26 @@ export function DashboardPage() {
       .catch(() => {
         if (mounted) {
           setSnapshot(EMPTY_SNAPSHOT);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getControlFeatures()
+      .then((payload) => {
+        if (mounted) {
+          setControlFeatures(payload || EMPTY_CONTROL_FEATURES);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setControlFeatures(EMPTY_CONTROL_FEATURES);
         }
       });
 
@@ -230,6 +260,23 @@ export function DashboardPage() {
 
   const protocol = summary.protocol_breakdown || { tcp: 0, udp: 0 };
   const devices = summary.trusted_device_breakdown || summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
+  const allowedActions = new Set(controlFeatures.allowed_actions || []);
+  const canTerminateHeadSession =
+    Boolean(controlFeatures.enabled) && allowedActions.has("terminate_head_session") && sessions.length > 0;
+
+  const handleTerminateHeadSession = async () => {
+    setTerminateLoading(true);
+    setTerminateResult("");
+    try {
+      const payload = await runControlAction("terminate_head_session", terminateToken.trim());
+      const target = payload?.terminated?.real_address || "target unknown";
+      setTerminateResult(`Termination request sent (${target})`);
+    } catch (error) {
+      setTerminateResult(`Termination failed: ${error.message}`);
+    } finally {
+      setTerminateLoading(false);
+    }
+  };
 
   return (
     <>
@@ -246,7 +293,7 @@ export function DashboardPage() {
             Live stream enabled
           </div>
         </div>
-        <p className="sub">Read-only observability surface. No control actions are executed from this portal.</p>
+        <p className="sub">Observability-first surface. Control actions are feature-flagged and token-gated.</p>
         <div className="hero-meta">
           <span>
             Updated: <strong>{snapshot.updated_at || "n/a"}</strong>
@@ -345,18 +392,42 @@ export function DashboardPage() {
             <h2>Active Sessions</h2>
             <p className="section-subtitle">Live sessions with audit labels, protocol mix, and connection details.</p>
           </div>
-          <div className="chip-row" aria-label="Active session summary">
-            <span className="chip">
-              <strong>{summary.active_clients ?? 0}</strong> raw
-            </span>
-            <span className="chip">
-              <strong>{summary.trusted_active_clients ?? 0}</strong> trusted
-            </span>
-            <span className="chip">
-              <strong>{summary.suspect_active_clients ?? 0}</strong> suspect
-            </span>
+          <div className="sessions-toolbar">
+            <div className="chip-row" aria-label="Active session summary">
+              <span className="chip">
+                <strong>{summary.active_clients ?? 0}</strong> raw
+              </span>
+              <span className="chip">
+                <strong>{summary.trusted_active_clients ?? 0}</strong> trusted
+              </span>
+              <span className="chip">
+                <strong>{summary.suspect_active_clients ?? 0}</strong> suspect
+              </span>
+            </div>
+            <div className="sessions-action-row">
+              <input
+                type="password"
+                className="control-input sessions-token-input"
+                placeholder="Control token"
+                value={terminateToken}
+                onChange={(event) => setTerminateToken(event.target.value)}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className="control-button sessions-action-button"
+                disabled={!canTerminateHeadSession || terminateLoading}
+                onClick={handleTerminateHeadSession}
+              >
+                {terminateLoading ? "Terminating..." : "Force Terminate Head Session"}
+              </button>
+            </div>
           </div>
         </div>
+        {controlFeatures.enabled ? null : (
+          <p className="hint">Session termination is disabled. Enable with PORTAL_CONTROL_ENABLED=1.</p>
+        )}
+        {terminateResult ? <p className="control-result">{terminateResult}</p> : null}
         <div className="table-wrap">
           <table>
             <thead>

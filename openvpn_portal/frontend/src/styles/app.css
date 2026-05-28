@@ -494,6 +494,29 @@ body {
   gap: 8px;
 }
 
+.sessions-toolbar {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.sessions-action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.sessions-token-input {
+  width: 220px;
+  min-width: 180px;
+}
+
+.sessions-action-button {
+  padding: 9px 11px;
+  font-size: 0.8rem;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -996,6 +1019,14 @@ tbody tr:hover {
   .cards-main {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .sessions-action-row {
+    flex-wrap: wrap;
+  }
+
+  .sessions-token-input {
+    width: min(100%, 280px);
+  }
 }
 
 @media (max-width: 720px) {
@@ -1042,6 +1073,21 @@ tbody tr:hover {
 
   .chip-row {
     justify-content: flex-start;
+  }
+
+  .sessions-toolbar {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .sessions-action-row {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .sessions-token-input,
+  .sessions-action-button {
+    width: 100%;
   }
 
   .control-header {

@@ -21,6 +21,10 @@ class Settings:
     control_enabled: bool
     control_token: str
     control_allowed_actions: list[str]
+    control_terminate_command: str
+    openvpn_management_tcp_socket: str
+    openvpn_management_udp_socket: str
+    openvpn_management_timeout_seconds: float
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -81,7 +85,7 @@ def _detect_status_files() -> list[str]:
 def load_settings() -> Settings:
     status_files = _detect_status_files()
     control_actions = _parse_csv_list(
-        os.getenv("PORTAL_CONTROL_ALLOWED_ACTIONS", "refresh_snapshot,sample_history")
+        os.getenv("PORTAL_CONTROL_ALLOWED_ACTIONS", "refresh_snapshot,sample_history,terminate_head_session")
     )
     return Settings(
         host=os.getenv("PORTAL_HOST", "0.0.0.0"),
@@ -98,4 +102,8 @@ def load_settings() -> Settings:
         control_enabled=_env_flag("PORTAL_CONTROL_ENABLED", default=False),
         control_token=os.getenv("PORTAL_CONTROL_TOKEN", "").strip(),
         control_allowed_actions=control_actions,
+        control_terminate_command=os.getenv("PORTAL_CONTROL_TERMINATE_COMMAND", "").strip(),
+        openvpn_management_tcp_socket=os.getenv("PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET", "").strip(),
+        openvpn_management_udp_socket=os.getenv("PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET", "").strip(),
+        openvpn_management_timeout_seconds=float(os.getenv("PORTAL_OPENVPN_MANAGEMENT_TIMEOUT_SECONDS", "2.0")),
     )

@@ -41,6 +41,7 @@ This page is the high-level entrypoint. Full procedures and incident details are
 
 - Runtime architecture: [docs/diagrams/portal-glass-architecture-style5.svg](docs/diagrams/portal-glass-architecture-style5.svg)
 - Live data flow: [docs/diagrams/portal-glass-live-dataflow-style5.svg](docs/diagrams/portal-glass-live-dataflow-style5.svg)
+- Backend mechanism and API flow: [docs/diagrams/openvpn-portal-backend-data-mechanism.svg](docs/diagrams/openvpn-portal-backend-data-mechanism.svg)
 - Portal runtime and deployment notes: [openvpn_portal/README.md](openvpn_portal/README.md)
 
 ### CI/CD Deployment Sequence
@@ -117,6 +118,7 @@ Manual dispatch inputs:
 - `GET /api/monitoring/backend`: backend collector monitoring (refresh attempts/failures, error rate, last refresh error).
 - `GET /api/live/sessions`: live SSE snapshots.
 - `GET /api/history/7d`: persisted trend history.
+- `POST /api/control/actions`: feature-flagged control actions (`refresh_snapshot`, `sample_history`, `terminate_head_session`).
 
 ## Read by Goal
 

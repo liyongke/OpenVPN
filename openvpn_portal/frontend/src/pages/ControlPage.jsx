@@ -271,6 +271,14 @@ export function ControlPage() {
             >
               {loadingAction === "sample_history" ? "Running..." : "Insert History Sample"}
             </button>
+            <button
+              type="button"
+              className="control-button"
+              disabled={!features.enabled || !allowedActions.has("terminate_head_session") || loadingAction !== ""}
+              onClick={() => execute("terminate_head_session")}
+            >
+              {loadingAction === "terminate_head_session" ? "Running..." : "Force Terminate Head Session"}
+            </button>
           </div>
           {!features.enabled ? <p className="hint">Enable with PORTAL_CONTROL_ENABLED=1 on backend.</p> : null}
           {result ? <p className="control-result">{result}</p> : null}

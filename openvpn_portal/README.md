@@ -6,14 +6,16 @@ For server-wide deployment guardrails and recovery procedures, see [../docs/OPEN
 
 ## Read-Only Guarantees
 
-- Read-only behavior only.
+- Read-only by default.
 - No changes to existing VPN scripts.
 - No restart/reload of OpenVPN.
 - No regeneration of any .ovpn profile.
+- Optional session termination can be enabled explicitly via control feature flags.
 
 ## Portal Diagrams (Style 5: Glassmorphism)
 
 Portal diagram assets are stored centrally under [../docs/diagrams/README.md](../docs/diagrams/README.md).
+Backend logic review doc: [../docs/OPENVPN_PORTAL_BACKEND_DATA_MECHANISM.md](../docs/OPENVPN_PORTAL_BACKEND_DATA_MECHANISM.md).
 
 ### Runtime Architecture
 
@@ -26,6 +28,12 @@ Reference: [../docs/diagrams/portal-glass-architecture-style5.svg](../docs/diagr
 ![OpenVPN Portal Live Data Flow (Style 5 Glassmorphism)](../docs/diagrams/portal-glass-live-dataflow-style5.svg)
 
 Reference: [../docs/diagrams/portal-glass-live-dataflow-style5.svg](../docs/diagrams/portal-glass-live-dataflow-style5.svg)
+
+### Backend Data Mechanism (API and State Flow)
+
+![OpenVPN Portal Backend Data Mechanism](../docs/diagrams/openvpn-portal-backend-data-mechanism.svg)
+
+Reference: [../docs/diagrams/openvpn-portal-backend-data-mechanism.svg](../docs/diagrams/openvpn-portal-backend-data-mechanism.svg)
 
 ## What it shows
 
@@ -47,6 +55,7 @@ Device identification note:
 - OpenVPN status files do not include a reliable phone/pc field by default.
 - The portal falls back to best-effort inference from usernames/common names only when no hints exist.
 - Accurate labels come from the server-side device hints file and are matched by real endpoint first (`ip:port`), then by real IP, username, and common name.
+- When multiple active sessions share the same public IP (for example same Wi-Fi NAT), the portal avoids applying real-IP-only hints to reduce cross-device mislabeling.
 
 Audit/stability note:
 - `active_clients` remains the raw count of status-file sessions.
@@ -55,12 +64,14 @@ Audit/stability note:
 
 ## What it does not do yet
 
-- No VPN session disconnect/block user actions.
 - No server-side quota enforcement.
 - No historical monthly usage unless status snapshots are externally archived.
 
 Control API scope note:
-- Optional control actions are limited to read-safe portal operations (`refresh_snapshot`, `sample_history`) and are gated by feature flag/token.
+- Optional control actions are gated by feature flag/token and include `refresh_snapshot`, `sample_history`, and `terminate_head_session`.
+- `terminate_head_session` targets the first row in Active Sessions and requires either:
+   - OpenVPN management sockets (`PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET` / `PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET`), or
+   - a custom terminate command via `PORTAL_CONTROL_TERMINATE_COMMAND`.
 
 ## Run locally
 
@@ -119,6 +130,11 @@ Environment variables:
 - PORTAL_DEVICE_HINTS_FILE default: /var/log/openvpn/device_hints.json
 - PORTAL_GEOIP_DB_PATH default: empty (when set, use local GeoLite2 DB first and fall back to ipwho.is)
 - PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
+- PORTAL_CONTROL_ALLOWED_ACTIONS default: refresh_snapshot,sample_history,terminate_head_session
+- PORTAL_CONTROL_TERMINATE_COMMAND default: empty (optional command template)
+- PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET default: empty
+- PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET default: empty
+- PORTAL_OPENVPN_MANAGEMENT_TIMEOUT_SECONDS default: 2.0
 
 ## Notes for your existing deployment
 
