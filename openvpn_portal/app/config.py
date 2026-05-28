@@ -16,6 +16,8 @@ class Settings:
     history_db_path: str
     history_retention_days: int
     history_sample_seconds: int
+    history_payload_mode: str
+    history_payload_session_cap: int
     live_poll_seconds: float
     device_hints_file: str
     control_enabled: bool
@@ -25,6 +27,8 @@ class Settings:
     openvpn_management_tcp_socket: str
     openvpn_management_udp_socket: str
     openvpn_management_timeout_seconds: float
+    control_terminate_min_interval_seconds: float
+    sessions_api_max_limit: int
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -97,6 +101,8 @@ def load_settings() -> Settings:
         history_db_path=os.getenv("PORTAL_HISTORY_DB", "/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3"),
         history_retention_days=int(os.getenv("PORTAL_HISTORY_RETENTION_DAYS", "7")),
         history_sample_seconds=int(os.getenv("PORTAL_HISTORY_SAMPLE_SECONDS", "60")),
+        history_payload_mode=os.getenv("PORTAL_HISTORY_PAYLOAD_MODE", "summary").strip().lower(),
+        history_payload_session_cap=int(os.getenv("PORTAL_HISTORY_PAYLOAD_SESSION_CAP", "50")),
         live_poll_seconds=float(os.getenv("PORTAL_LIVE_POLL_SECONDS", "1.0")),
         device_hints_file=os.getenv("PORTAL_DEVICE_HINTS_FILE", "/var/log/openvpn/device_hints.json"),
         control_enabled=_env_flag("PORTAL_CONTROL_ENABLED", default=False),
@@ -106,4 +112,8 @@ def load_settings() -> Settings:
         openvpn_management_tcp_socket=os.getenv("PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET", "").strip(),
         openvpn_management_udp_socket=os.getenv("PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET", "").strip(),
         openvpn_management_timeout_seconds=float(os.getenv("PORTAL_OPENVPN_MANAGEMENT_TIMEOUT_SECONDS", "2.0")),
+        control_terminate_min_interval_seconds=float(
+            os.getenv("PORTAL_CONTROL_TERMINATE_MIN_INTERVAL_SECONDS", "2.0")
+        ),
+        sessions_api_max_limit=max(10, int(os.getenv("PORTAL_SESSIONS_API_MAX_LIMIT", "1000"))),
     )

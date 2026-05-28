@@ -8,11 +8,43 @@ from typing import Any
 
 
 class HistoryStore:
-    def __init__(self, db_path: str, retention_days: int = 7) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        retention_days: int = 7,
+        payload_mode: str = "summary",
+        payload_session_cap: int = 50,
+    ) -> None:
         self.db_path = Path(db_path)
         self.retention_days = max(1, retention_days)
+        mode = (payload_mode or "summary").strip().lower()
+        self.payload_mode = mode if mode in {"full", "summary", "none"} else "summary"
+        self.payload_session_cap = max(0, int(payload_session_cap))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+
+    def _payload_for_storage(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.payload_mode == "none":
+            return {}
+
+        if self.payload_mode == "full":
+            return payload
+
+        sessions_value = payload.get("sessions", [])
+        sessions = sessions_value if isinstance(sessions_value, list) else []
+        capped_sessions = sessions[: self.payload_session_cap] if self.payload_session_cap > 0 else []
+
+        return {
+            "generated_at": payload.get("generated_at", ""),
+            "updated_at": payload.get("updated_at", ""),
+            "status_exists": bool(payload.get("status_exists", False)),
+            "status_sources": payload.get("status_sources", []),
+            "summary": payload.get("summary", {}),
+            "sessions_sample": capped_sessions,
+            "sessions_sample_count": len(capped_sessions),
+            "sessions_total": len(sessions),
+            "payload_mode": "summary",
+        }
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=15)
@@ -51,6 +83,7 @@ class HistoryStore:
 
     def insert_snapshot(self, payload: dict[str, Any], sampled_at: datetime) -> None:
         summary = payload.get("summary", {})
+        stored_payload = self._payload_for_storage(payload)
         with self._connect() as conn:
             conn.execute(
                 """
@@ -71,7 +104,7 @@ class HistoryStore:
                     int(summary.get("suspect_active_clients", 0)),
                     int(summary.get("total_bytes_received", 0)),
                     int(summary.get("total_bytes_sent", 0)),
-                    json.dumps(payload, separators=(",", ":"), ensure_ascii=True),
+                    json.dumps(stored_payload, separators=(",", ":"), ensure_ascii=True),
                 ),
             )
 

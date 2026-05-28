@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -35,6 +36,7 @@ class LiveStateCollector:
         self._refresh_attempts: int = 0
         self._refresh_failures: int = 0
         self._last_refresh_error: str = ""
+        self._last_refresh_duration_ms: float = 0.0
 
     @property
     def latest_payload(self) -> dict[str, Any]:
@@ -86,6 +88,10 @@ class LiveStateCollector:
     def last_successful_refresh_at(self) -> datetime:
         return self._last_successful_refresh_at
 
+    @property
+    def last_refresh_duration_ms(self) -> float:
+        return self._last_refresh_duration_ms
+
     def unsubscribe(self, queue: asyncio.Queue[str]) -> None:
         self._subscribers.discard(queue)
 
@@ -97,9 +103,11 @@ class LiveStateCollector:
             payload_changed = False
 
             try:
+                started = time.perf_counter()
                 next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
                 next_payload["live_source"] = "status_file"
-                payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+                self._last_refresh_duration_ms = round((time.perf_counter() - started) * 1000.0, 3)
+                payload_changed = self._payload_signature(next_payload) != self._payload_signature(self._latest_payload)
                 self._last_successful_refresh_at = now_utc
                 self._last_refresh_error = ""
             except Exception as exc:
@@ -130,8 +138,42 @@ class LiveStateCollector:
         return elapsed >= float(self.history_sample_seconds)
 
     @staticmethod
-    def _payload_hash(payload: dict[str, Any]) -> str:
-        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    def _payload_signature(payload: dict[str, Any]) -> str:
+        sessions_value = payload.get("sessions", [])
+        sessions = sessions_value if isinstance(sessions_value, list) else []
+        summary = payload.get("summary", {}) if isinstance(payload.get("summary", {}), dict) else {}
+        status_sources_value = payload.get("status_sources", [])
+        status_sources = status_sources_value if isinstance(status_sources_value, list) else []
+
+        sources_signature = [
+            {
+                "path": str(s.get("path", "")),
+                "exists": bool(s.get("exists", False)),
+                "session_count": int(s.get("session_count", 0)),
+                "updated_at": str(s.get("updated_at", "")),
+            }
+            for s in status_sources
+            if isinstance(s, dict)
+        ]
+
+        # Signature intentionally avoids serializing full session payload to reduce CPU.
+        # It tracks key values that should change whenever effective state changes.
+        signature = {
+            "updated_at": str(payload.get("updated_at", "")),
+            "status_exists": bool(payload.get("status_exists", False)),
+            "sessions_total": len(sessions),
+            "summary": {
+                "active_clients": int(summary.get("active_clients", 0)),
+                "trusted_active_clients": int(summary.get("trusted_active_clients", 0)),
+                "suspect_active_clients": int(summary.get("suspect_active_clients", 0)),
+                "total_bytes_received": int(summary.get("total_bytes_received", 0)),
+                "total_bytes_sent": int(summary.get("total_bytes_sent", 0)),
+                "unique_real_endpoints_raw": int(summary.get("unique_real_endpoints_raw", 0)),
+                "unique_real_endpoints_trusted": int(summary.get("unique_real_endpoints_trusted", 0)),
+            },
+            "status_sources": sources_signature,
+        }
+        return json.dumps(signature, sort_keys=True, separators=(",", ":"))
 
     async def _broadcast(self, event: str) -> None:
         stale_queues: list[asyncio.Queue[str]] = []
@@ -151,15 +193,17 @@ class LiveStateCollector:
         self._refresh_attempts += 1
 
         try:
+            started = time.perf_counter()
             next_payload = load_openvpn_status_multi(self.status_files, device_hints_file=self.device_hints_file)
             next_payload["live_source"] = "status_file"
+            self._last_refresh_duration_ms = round((time.perf_counter() - started) * 1000.0, 3)
         except Exception as exc:
             self._refresh_failures += 1
             self._last_refresh_at = now_utc
             self._last_refresh_error = str(exc)
             raise
 
-        payload_changed = self._payload_hash(next_payload) != self._payload_hash(self._latest_payload)
+        payload_changed = self._payload_signature(next_payload) != self._payload_signature(self._latest_payload)
         self._latest_payload = next_payload
         self._last_refresh_at = now_utc
         self._last_successful_refresh_at = now_utc

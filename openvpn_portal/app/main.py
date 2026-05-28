@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -20,7 +21,12 @@ from app.services.openvpn_control import OpenVPNControlService, OpenVPNControlSe
 
 settings = load_settings()
 app = FastAPI(title=settings.title)
-history_store = HistoryStore(settings.history_db_path, retention_days=settings.history_retention_days)
+history_store = HistoryStore(
+    settings.history_db_path,
+    retention_days=settings.history_retention_days,
+    payload_mode=settings.history_payload_mode,
+    payload_session_cap=settings.history_payload_session_cap,
+)
 collector = LiveStateCollector(
     settings.status_files,
     poll_interval_seconds=max(0.5, settings.live_poll_seconds),
@@ -37,6 +43,7 @@ control_service = OpenVPNControlService(
         management_timeout_seconds=max(1.0, settings.openvpn_management_timeout_seconds),
     )
 )
+_last_terminate_request_monotonic = 0.0
 
 base_dir = Path(__file__).resolve().parent
 project_root = base_dir.parent.parent
@@ -87,6 +94,36 @@ def _seconds_since_iso(value: str) -> float | None:
     now_utc = datetime.now(timezone.utc)
     delta = (now_utc - parsed.astimezone(timezone.utc)).total_seconds()
     return max(0.0, round(delta, 3))
+
+
+def _parse_limit_offset(limit: int | None, offset: int | None, max_limit: int) -> tuple[int | None, int]:
+    parsed_offset = max(0, int(offset or 0))
+    if limit is None:
+        return None, parsed_offset
+    parsed_limit = max(1, min(int(limit), max_limit))
+    return parsed_limit, parsed_offset
+
+
+def _filter_sessions(
+    sessions: list[dict],
+    protocol: str | None = None,
+    audit_class: str | None = None,
+    username: str | None = None,
+) -> list[dict]:
+    filtered = sessions
+    if protocol:
+        protocol_value = protocol.strip().lower()
+        filtered = [s for s in filtered if str(s.get("protocol", "")).strip().lower() == protocol_value]
+
+    if audit_class:
+        audit_value = audit_class.strip().lower()
+        filtered = [s for s in filtered if str(s.get("audit_class", "")).strip().lower() == audit_value]
+
+    if username:
+        uname = username.strip().lower()
+        filtered = [s for s in filtered if uname in str(s.get("username", "")).strip().lower()]
+
+    return filtered
 
 
 def _select_status_source(payload: dict, selected: str | None = None) -> str:
@@ -199,6 +236,7 @@ def api_monitoring_backend() -> JSONResponse:
             "last_refresh_age_seconds": round(max(0.0, last_refresh_age), 3),
             "last_successful_refresh_age_seconds": round(max(0.0, last_successful_refresh_age), 3),
             "last_refresh_error": collector.last_refresh_error,
+            "last_refresh_duration_ms": collector.last_refresh_duration_ms,
             "sse_subscribers": collector.subscriber_count,
             "status_sources": payload.get("status_sources", []),
             "generated_at": payload.get("generated_at", ""),
@@ -264,6 +302,16 @@ async def api_control_actions(
         )
 
     if action == "terminate_head_session":
+        global _last_terminate_request_monotonic
+        now_monotonic = time.monotonic()
+        min_interval = max(0.0, settings.control_terminate_min_interval_seconds)
+        if min_interval > 0 and (now_monotonic - _last_terminate_request_monotonic) < min_interval:
+            retry_after = round(min_interval - (now_monotonic - _last_terminate_request_monotonic), 3)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Terminate action is rate-limited, retry in {retry_after}s",
+            )
+
         sessions_value = collector.latest_payload.get("sessions", [])
         sessions = sessions_value if isinstance(sessions_value, list) else []
         if not sessions:
@@ -274,6 +322,8 @@ async def api_control_actions(
             terminate_result = await asyncio.to_thread(control_service.terminate_session, target)
         except SessionTerminationError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        _last_terminate_request_monotonic = now_monotonic
 
         changed = await collector.refresh_once(force_broadcast=True)
         return JSONResponse(
@@ -300,9 +350,36 @@ async def api_control_actions(
 
 
 @app.get("/api/sessions")
-def api_sessions() -> JSONResponse:
+def api_sessions(
+    limit: int | None = Query(default=None, ge=1),
+    offset: int | None = Query(default=0, ge=0),
+    protocol: str | None = Query(default=None),
+    audit_class: str | None = Query(default=None),
+    username: str | None = Query(default=None),
+) -> JSONResponse:
     payload = collector.latest_payload
-    return JSONResponse(payload)
+    sessions_value = payload.get("sessions", [])
+    sessions = sessions_value if isinstance(sessions_value, list) else []
+    filtered = _filter_sessions(sessions, protocol=protocol, audit_class=audit_class, username=username)
+
+    parsed_limit, parsed_offset = _parse_limit_offset(limit, offset, settings.sessions_api_max_limit)
+    paged_sessions = (
+        filtered[parsed_offset : parsed_offset + parsed_limit]
+        if parsed_limit is not None
+        else filtered[parsed_offset:]
+    )
+
+    response_payload = dict(payload)
+    response_payload["sessions"] = paged_sessions
+    response_payload["pagination"] = {
+        "total": len(sessions),
+        "filtered": len(filtered),
+        "returned": len(paged_sessions),
+        "limit": parsed_limit,
+        "offset": parsed_offset,
+        "max_limit": settings.sessions_api_max_limit,
+    }
+    return JSONResponse(response_payload)
 
 
 @app.get("/api/summary")
@@ -318,10 +395,25 @@ def api_live_summary() -> JSONResponse:
 
 
 @app.get("/api/map/sessions")
-def api_map_sessions() -> JSONResponse:
+def api_map_sessions(
+    limit: int | None = Query(default=None, ge=1),
+    offset: int | None = Query(default=0, ge=0),
+    protocol: str | None = Query(default=None),
+    audit_class: str | None = Query(default=None),
+) -> JSONResponse:
     payload = collector.latest_payload
-    sessions = payload.get("sessions", [])
-    enriched_sessions = geoip_service.enrich_sessions(sessions if isinstance(sessions, list) else [])
+    sessions_value = payload.get("sessions", [])
+    sessions = sessions_value if isinstance(sessions_value, list) else []
+    filtered_sessions = _filter_sessions(sessions, protocol=protocol, audit_class=audit_class, username=None)
+
+    parsed_limit, parsed_offset = _parse_limit_offset(limit, offset, settings.sessions_api_max_limit)
+    paged_source = (
+        filtered_sessions[parsed_offset : parsed_offset + parsed_limit]
+        if parsed_limit is not None
+        else filtered_sessions[parsed_offset:]
+    )
+
+    enriched_sessions = geoip_service.enrich_sessions(paged_source)
 
     country_counts: dict[str, int] = {}
     provider_counts: dict[str, int] = {}
@@ -347,12 +439,20 @@ def api_map_sessions() -> JSONResponse:
             "generated_at": payload.get("generated_at", ""),
             "updated_at": payload.get("updated_at", ""),
             "live_poll_seconds": settings.live_poll_seconds,
-            "session_total": len(enriched_sessions),
+            "session_total": len(filtered_sessions),
             "mappable_total": mappable_total,
             "mappable_trusted_total": mapped_trusted,
             "country_breakdown": [{"country": name, "count": count} for name, count in top_countries],
             "provider_breakdown": [{"provider": name, "count": count} for name, count in top_providers],
             "sessions": enriched_sessions,
+            "pagination": {
+                "total": len(sessions),
+                "filtered": len(filtered_sessions),
+                "returned": len(enriched_sessions),
+                "limit": parsed_limit,
+                "offset": parsed_offset,
+                "max_limit": settings.sessions_api_max_limit,
+            },
         }
     )
 
