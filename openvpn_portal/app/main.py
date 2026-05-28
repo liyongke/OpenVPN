@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from app.config import load_settings
 from app.services.geoip import GeoIpService
 from app.services.history_store import HistoryStore
 from app.services.live_state import LiveStateCollector
+from app.services.openvpn_control import OpenVPNControlService, OpenVPNControlSettings, SessionTerminationError
 
 settings = load_settings()
 app = FastAPI(title=settings.title)
@@ -27,6 +29,14 @@ collector = LiveStateCollector(
     device_hints_file=settings.device_hints_file,
 )
 geoip_service = GeoIpService()
+control_service = OpenVPNControlService(
+    OpenVPNControlSettings(
+        terminate_command=settings.control_terminate_command,
+        management_tcp_socket=settings.openvpn_management_tcp_socket,
+        management_udp_socket=settings.openvpn_management_udp_socket,
+        management_timeout_seconds=max(1.0, settings.openvpn_management_timeout_seconds),
+    )
+)
 
 base_dir = Path(__file__).resolve().parent
 project_root = base_dir.parent.parent
@@ -250,6 +260,39 @@ async def api_control_actions(
                 "action": action,
                 "sampled_at": now_utc.isoformat(),
                 "message": "History sample inserted",
+            }
+        )
+
+    if action == "terminate_head_session":
+        sessions_value = collector.latest_payload.get("sessions", [])
+        sessions = sessions_value if isinstance(sessions_value, list) else []
+        if not sessions:
+            raise HTTPException(status_code=404, detail="No active sessions available to terminate")
+
+        target = sessions[0]
+        try:
+            terminate_result = await asyncio.to_thread(control_service.terminate_session, target)
+        except SessionTerminationError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        changed = await collector.refresh_once(force_broadcast=True)
+        return JSONResponse(
+            {
+                "ok": True,
+                "action": action,
+                "changed": changed,
+                "terminated": {
+                    "username": target.get("username", ""),
+                    "common_name": target.get("common_name", ""),
+                    "real_address": target.get("real_address", ""),
+                    "virtual_address": target.get("virtual_address", ""),
+                    "protocol": target.get("protocol", ""),
+                    "client_id": target.get("client_id", None),
+                },
+                "method": terminate_result.get("method", "unknown"),
+                "result": terminate_result.get("result", ""),
+                "message": "Head session termination requested",
+                "generated_at": collector.latest_payload.get("generated_at", ""),
             }
         )
 

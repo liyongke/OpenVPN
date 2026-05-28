@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 
+_DEVICE_HINTS_CACHE: dict[str, tuple[int, int, dict[str, dict[str, tuple[str, str]]]]] = {}
+
+
 @dataclass
 class ClientSession:
     common_name: str
@@ -21,6 +24,7 @@ class ClientSession:
     source_file: str
     device_type: str
     device_platform: str
+    client_id: int | None
 
 
 def _safe_int(value: str) -> int:
@@ -73,15 +77,26 @@ def _load_device_hints(device_hints_file: str) -> dict[str, dict[str, tuple[str,
         return empty
 
     path = Path(device_hints_file)
-    if not path.exists():
+    cache_key = str(path)
+
+    try:
+        stat = path.stat()
+    except OSError:
+        _DEVICE_HINTS_CACHE.pop(cache_key, None)
         return empty
+
+    cached = _DEVICE_HINTS_CACHE.get(cache_key)
+    if cached and cached[0] == int(stat.st_mtime_ns) and cached[1] == int(stat.st_size):
+        return cached[2]
 
     try:
         raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
     except (OSError, json.JSONDecodeError):
+        _DEVICE_HINTS_CACHE.pop(cache_key, None)
         return empty
 
     if not isinstance(raw, dict):
+        _DEVICE_HINTS_CACHE.pop(cache_key, None)
         return empty
 
     result = {"users": {}, "common_names": {}, "real_addresses": {}, "real_endpoints": {}}
@@ -96,6 +111,8 @@ def _load_device_hints(device_hints_file: str) -> dict[str, dict[str, tuple[str,
                 continue
             result[section][str(key).strip().lower()] = parsed
 
+    _DEVICE_HINTS_CACHE[cache_key] = (int(stat.st_mtime_ns), int(stat.st_size), result)
+
     return result
 
 
@@ -104,6 +121,7 @@ def _apply_device_hints(
     common_name: str,
     real_address: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
+    allow_real_ip_hint: bool = True,
 ) -> tuple[str, str] | None:
     users = device_hints.get("users", {})
     common_names = device_hints.get("common_names", {})
@@ -114,11 +132,11 @@ def _apply_device_hints(
     if endpoint_key in real_endpoints:
         return real_endpoints[endpoint_key]
 
-    # Real address is the most specific signal for a live session and avoids
-    # cross-device collisions when the same username/common name is reused.
-    ip_key = real_address.strip().lower().split(":", 1)[0]
-    if ip_key in real_addresses:
-        return real_addresses[ip_key]
+    # Real IP hints can collide when multiple clients are behind one NAT.
+    if allow_real_ip_hint:
+        ip_key = real_address.strip().lower().split(":", 1)[0]
+        if ip_key in real_addresses:
+            return real_addresses[ip_key]
 
     user_key = username.strip().lower()
     if user_key in users:
@@ -136,8 +154,15 @@ def _infer_device(
     common_name: str,
     real_address: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
+    allow_real_ip_hint: bool = True,
 ) -> tuple[str, str]:
-    hinted = _apply_device_hints(username, common_name, real_address, device_hints)
+    hinted = _apply_device_hints(
+        username,
+        common_name,
+        real_address,
+        device_hints,
+        allow_real_ip_hint=allow_real_ip_hint,
+    )
     if hinted:
         return hinted
 
@@ -185,6 +210,21 @@ def _parse_csv_status(
 ) -> tuple[list[ClientSession], str]:
     sessions: list[ClientSession] = []
     updated_at = ""
+    ip_occurrences: dict[str, int] = {}
+
+    for raw in lines:
+        line = raw.strip()
+        if not (line.startswith("CLIENT_LIST,") or line.startswith("CLIENT_LIST\t")):
+            continue
+
+        parts = _split_status_fields(line)
+        if len(parts) < 3:
+            continue
+
+        ip_key = parts[2].strip().lower().split(":", 1)[0]
+        if not ip_key:
+            continue
+        ip_occurrences[ip_key] = ip_occurrences.get(ip_key, 0) + 1
 
     for raw in lines:
         line = raw.strip()
@@ -214,7 +254,20 @@ def _parse_csv_status(
         connected_since = parts[7]
         connected_since_epoch = _safe_int(parts[8])
         username = parts[9] if len(parts) > 9 and parts[9] and parts[9] != "UNDEF" else common_name
-        device_type, device_platform = _infer_device(username, common_name, real_address, device_hints)
+        client_id_value: int | None = None
+        if len(parts) > 10:
+            parsed_client_id = _safe_int(parts[10])
+            client_id_value = parsed_client_id if parsed_client_id > 0 else None
+
+        real_ip = real_address.strip().lower().split(":", 1)[0]
+        allow_real_ip_hint = ip_occurrences.get(real_ip, 0) <= 1
+        device_type, device_platform = _infer_device(
+            username,
+            common_name,
+            real_address,
+            device_hints,
+            allow_real_ip_hint=allow_real_ip_hint,
+        )
 
         sessions.append(
             ClientSession(
@@ -230,6 +283,7 @@ def _parse_csv_status(
                 source_file=source_file,
                 device_type=device_type,
                 device_platform=device_platform,
+                client_id=client_id_value,
             )
         )
 
@@ -244,6 +298,23 @@ def _parse_legacy_status(
 ) -> tuple[list[ClientSession], str]:
     sessions: list[ClientSession] = []
     updated_at = ""
+    ip_occurrences: dict[str, int] = {}
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("Updated,"):
+            continue
+        if "," not in line:
+            continue
+
+        parts = line.split(",")
+        if len(parts) < 2:
+            continue
+
+        candidate = parts[1].strip().lower().split(":", 1)[0]
+        if candidate.count(".") != 3:
+            continue
+        ip_occurrences[candidate] = ip_occurrences.get(candidate, 0) + 1
 
     in_client_table = False
     for raw in lines:
@@ -281,7 +352,15 @@ def _parse_legacy_status(
         bytes_received = _safe_int(parts[2])
         bytes_sent = _safe_int(parts[3])
         connected_since = parts[4]
-        device_type, device_platform = _infer_device(common_name, common_name, real_address, device_hints)
+        real_ip = real_address.strip().lower().split(":", 1)[0]
+        allow_real_ip_hint = ip_occurrences.get(real_ip, 0) <= 1
+        device_type, device_platform = _infer_device(
+            common_name,
+            common_name,
+            real_address,
+            device_hints,
+            allow_real_ip_hint=allow_real_ip_hint,
+        )
 
         sessions.append(
             ClientSession(
@@ -297,6 +376,7 @@ def _parse_legacy_status(
                 source_file=source_file,
                 device_type=device_type,
                 device_platform=device_platform,
+                client_id=None,
             )
         )
 
@@ -571,6 +651,7 @@ def load_openvpn_status(
                 "source_file": s.source_file,
                 "device_type": s.device_type,
                 "device_platform": s.device_platform,
+                "client_id": s.client_id,
                 "trusted_session": trusted,
                 "audit_class": "trusted" if trusted else "suspect",
                 "audit_flags": flags,
