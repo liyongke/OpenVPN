@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { getControlFeatures, getHistory7d, getLiveSummary, runControlAction, subscribeLiveSessions } from "../api/client";
+import {
+  getControlFeatures,
+  getHistory7d,
+  getStoredControlTokenEventName,
+  getLiveSummary,
+  getStoredControlToken,
+  runControlAction,
+  subscribeLiveSessions,
+} from "../api/client";
 
 const portalIconUrl = "/static/openvpn-icon.svg";
 
@@ -17,6 +25,10 @@ const EMPTY_SNAPSHOT = {
     unique_real_endpoints_raw: 0,
     user_usage: [],
   },
+  diagnostics: {
+    cross_protocol_duplicate_count: 0,
+    cross_protocol_duplicates: [],
+  },
   sessions: [],
   status_sources: [],
   status_exists: false,
@@ -26,6 +38,7 @@ const EMPTY_SNAPSHOT = {
 
 const EMPTY_CONTROL_FEATURES = {
   enabled: false,
+  control_available: false,
   auth_required: true,
   allowed_actions: [],
 };
@@ -124,8 +137,8 @@ export function DashboardPage() {
   const [historyDays, setHistoryDays] = useState([]);
   const [historyError, setHistoryError] = useState(false);
   const [controlFeatures, setControlFeatures] = useState(EMPTY_CONTROL_FEATURES);
-  const [terminateToken, setTerminateToken] = useState("");
-  const [terminateLoading, setTerminateLoading] = useState(false);
+  const [controlToken, setControlToken] = useState(() => getStoredControlToken());
+  const [terminatingKey, setTerminatingKey] = useState("");
   const [terminateResult, setTerminateResult] = useState("");
 
   useEffect(() => {
@@ -151,7 +164,7 @@ export function DashboardPage() {
   useEffect(() => {
     let mounted = true;
 
-    getControlFeatures()
+    getControlFeatures(controlToken)
       .then((payload) => {
         if (mounted) {
           setControlFeatures(payload || EMPTY_CONTROL_FEATURES);
@@ -165,6 +178,22 @@ export function DashboardPage() {
 
     return () => {
       mounted = false;
+    };
+  }, [controlToken]);
+
+  useEffect(() => {
+    const syncControlToken = () => {
+      setControlToken(getStoredControlToken());
+    };
+    const controlTokenEvent = getStoredControlTokenEventName();
+
+    window.addEventListener("storage", syncControlToken);
+    window.addEventListener("focus", syncControlToken);
+    window.addEventListener(controlTokenEvent, syncControlToken);
+    return () => {
+      window.removeEventListener("storage", syncControlToken);
+      window.removeEventListener("focus", syncControlToken);
+      window.removeEventListener(controlTokenEvent, syncControlToken);
     };
   }, []);
 
@@ -260,21 +289,43 @@ export function DashboardPage() {
 
   const protocol = summary.protocol_breakdown || { tcp: 0, udp: 0 };
   const devices = summary.trusted_device_breakdown || summary.device_breakdown || { phone: 0, pc: 0, unknown: 0 };
+  const diagnostics = snapshot.diagnostics || { cross_protocol_duplicate_count: 0, cross_protocol_duplicates: [] };
+  const duplicateCount = Number(diagnostics.cross_protocol_duplicate_count || 0);
+  const duplicatePreview = Array.isArray(diagnostics.cross_protocol_duplicates)
+    ? diagnostics.cross_protocol_duplicates.slice(0, 3)
+    : [];
   const allowedActions = new Set(controlFeatures.allowed_actions || []);
-  const canTerminateHeadSession =
-    Boolean(controlFeatures.enabled) && allowedActions.has("terminate_head_session") && sessions.length > 0;
+  const canTerminateSession = Boolean(controlFeatures.enabled) && allowedActions.has("terminate_head_session");
 
-  const handleTerminateHeadSession = async () => {
-    setTerminateLoading(true);
+  const sessionActionKey = (session, index) =>
+    [
+      session.protocol || "",
+      session.real_address || "",
+      session.virtual_address || "",
+      session.common_name || "",
+      session.client_id ?? "",
+      index,
+    ].join("|");
+
+  const handleTerminateSession = async (session, index) => {
+    const actionKey = sessionActionKey(session, index);
+    setTerminatingKey(actionKey);
     setTerminateResult("");
     try {
-      const payload = await runControlAction("terminate_head_session", terminateToken.trim());
+      const payload = await runControlAction("terminate_head_session", controlToken, {
+        target_username: session.username || "",
+        target_common_name: session.common_name || "",
+        target_real_address: session.real_address || "",
+        target_virtual_address: session.virtual_address || "",
+        target_protocol: session.protocol || "",
+        target_client_id: session.client_id ?? null,
+      });
       const target = payload?.terminated?.real_address || "target unknown";
       setTerminateResult(`Termination request sent (${target})`);
     } catch (error) {
       setTerminateResult(`Termination failed: ${error.message}`);
     } finally {
-      setTerminateLoading(false);
+      setTerminatingKey("");
     }
   };
 
@@ -293,7 +344,7 @@ export function DashboardPage() {
             Live stream enabled
           </div>
         </div>
-        <p className="sub">Observability-first surface. Control actions are feature-flagged and token-gated.</p>
+        <p className="sub">Observability-first surface. Row termination unlocks after a successful control login.</p>
         <div className="hero-meta">
           <span>
             Updated: <strong>{snapshot.updated_at || "n/a"}</strong>
@@ -351,6 +402,18 @@ export function DashboardPage() {
             summary.
           </p>
         </article>
+        <article className="card">
+          <h2>Cross-Protocol Duplicates</h2>
+          <p className="metric small">{duplicateCount}</p>
+          <p className="hint">Same identity currently active on both TCP and UDP daemons.</p>
+          {duplicatePreview.length ? (
+            <p className="source-meta">
+              {duplicatePreview
+                .map((item) => `${item.identity} [${(item.protocols || []).join("/")}]`)
+                .join(" | ")}
+            </p>
+          ) : null}
+        </article>
         <article className="card coverage-card">
           <h2>Trusted Identity Coverage</h2>
           <div className="coverage-header">
@@ -404,27 +467,11 @@ export function DashboardPage() {
                 <strong>{summary.suspect_active_clients ?? 0}</strong> suspect
               </span>
             </div>
-            <div className="sessions-action-row">
-              <input
-                type="password"
-                className="control-input sessions-token-input"
-                placeholder="Control token"
-                value={terminateToken}
-                onChange={(event) => setTerminateToken(event.target.value)}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className="control-button sessions-action-button"
-                disabled={!canTerminateHeadSession || terminateLoading}
-                onClick={handleTerminateHeadSession}
-              >
-                {terminateLoading ? "Terminating..." : "Force Terminate Head Session"}
-              </button>
-            </div>
           </div>
         </div>
-        {controlFeatures.enabled ? null : (
+        {controlFeatures.enabled ? null : controlFeatures.control_available ? (
+          <p className="hint">Row termination stays locked until you log in from the control icon.</p>
+        ) : (
           <p className="hint">Session termination is disabled. Enable with PORTAL_CONTROL_ENABLED=1.</p>
         )}
         {terminateResult ? <p className="control-result">{terminateResult}</p> : null}
@@ -432,6 +479,7 @@ export function DashboardPage() {
           <table>
             <thead>
               <tr>
+                <th aria-label="Terminate session" />
                 <th>User</th>
                 <th>Device</th>
                 <th>Platform</th>
@@ -449,11 +497,23 @@ export function DashboardPage() {
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
-                  <td colSpan="12">No active sessions found in status file.</td>
+                  <td colSpan="13">No active sessions found in status file.</td>
                 </tr>
               ) : (
                 sessions.map((session, index) => (
                   <tr key={`${session.username}-${session.common_name}-${index}`}>
+                    <td>
+                      <button
+                        type="button"
+                        className="session-terminate-button"
+                        disabled={!canTerminateSession || Boolean(terminatingKey)}
+                        onClick={() => handleTerminateSession(session, index)}
+                        aria-label={`Terminate session for ${session.username || session.common_name || "client"}`}
+                        title={canTerminateSession ? "Force terminate this session" : "Log in to enable termination"}
+                      >
+                        &times;
+                      </button>
+                    </td>
                     <td>{session.username}</td>
                     <td>{session.device_type || "unknown"}</td>
                     <td>{session.device_platform || "unknown"}</td>

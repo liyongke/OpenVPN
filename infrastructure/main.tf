@@ -303,6 +303,22 @@ data "aws_iam_policy_document" "github_actions_deploy_policy" {
     ]
     resources = ["*"]
   }
+
+  statement {
+    sid    = "AllowPortalAuthSecretManagement"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:ListSecretVersionIds"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.portal_auth_secret_name}*"
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_deploy_policy" {
@@ -344,6 +360,22 @@ data "aws_iam_policy_document" "github_actions_dev_policy" {
       "ssm:DescribeInstanceInformation"
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowPortalAuthSecretManagementDev"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:ListSecretVersionIds"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:${var.portal_auth_secret_name}*"
+    ]
   }
 }
 

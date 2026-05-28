@@ -6,6 +6,33 @@ async function fetchJson(path) {
   return response.json();
 }
 
+const CONTROL_TOKEN_STORAGE_KEY = "portal.controlToken";
+const CONTROL_TOKEN_EVENT = "portal-control-token-changed";
+
+export function getStoredControlToken() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(CONTROL_TOKEN_STORAGE_KEY) || "";
+}
+
+export function setStoredControlToken(token) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const value = String(token || "").trim();
+  if (value) {
+    window.localStorage.setItem(CONTROL_TOKEN_STORAGE_KEY, value);
+  } else {
+    window.localStorage.removeItem(CONTROL_TOKEN_STORAGE_KEY);
+  }
+  window.dispatchEvent(new CustomEvent(CONTROL_TOKEN_EVENT, { detail: value }));
+}
+
+export function getStoredControlTokenEventName() {
+  return CONTROL_TOKEN_EVENT;
+}
+
 async function postJson(path, body, token = "") {
   const headers = {
     "Content-Type": "application/json",
@@ -56,6 +83,12 @@ export function getMapSessions() {
   return fetchJson("/api/map/sessions");
 }
 
+export function getControlLatency(windowSeconds = 300) {
+  const params = new URLSearchParams();
+  params.set("window_seconds", String(windowSeconds));
+  return fetchJson(`/api/control/latency?${params.toString()}`);
+}
+
 export async function getControlFeatures(token = "") {
   const headers = {};
   if (token) {
@@ -68,8 +101,8 @@ export async function getControlFeatures(token = "") {
   return response.json();
 }
 
-export function runControlAction(action, token = "") {
-  return postJson("/api/control/actions", { action }, token);
+export function runControlAction(action, token = "", payload = {}) {
+  return postJson("/api/control/actions", { action, ...payload }, token);
 }
 
 export function loginControl(username, password) {

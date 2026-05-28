@@ -14,7 +14,8 @@ Related diagram:
 - Key behavior:
   - `OPENVPN_STATUS_FILES` is preferred over `OPENVPN_STATUS_FILE`.
   - If `PORTAL_CONTROL_AUTH_SECRET_ID` is configured, control auth credentials are loaded from AWS Secrets Manager JSON payload.
-  - Control auth session mode is enabled when username is present and either password or password-hash is configured.
+  - Secret JSON keys accepted by runtime: `username`, `password_hash`, `password` (plus `control_auth_*` aliases).
+  - Control auth session mode is enabled when username is present and either password or password-hash is available from the secret or env fallback.
   - Legacy feature-flag/token mode is used only when auth-session credentials are not configured.
 
 Primary code:
@@ -67,6 +68,7 @@ Primary code:
 ### Step 6: Feature-Flagged Control Actions
 - `POST /api/control/actions` requires valid control authorization.
 - Preferred mode: login with username/password (`/api/control/auth/login`) and use issued session token.
+- Operations Center keeps a visible token field for legacy/manual token entry and opens user/password auth in a popup dialog.
 - Legacy mode: `PORTAL_CONTROL_ENABLED` and optional `PORTAL_CONTROL_TOKEN`.
 - Supported actions:
   - `refresh_snapshot`: force refresh and optional SSE broadcast.
@@ -207,3 +209,4 @@ Use this as a validation checklist:
 - Geo lookup may be skipped for private/invalid endpoint IPs.
 - `terminate_head_session` acts on ordering from latest parsed snapshot; it is intentionally explicit and simple, not a filtered selector.
 - Control auth sessions are in-memory and process-local (restart clears sessions; multi-worker deployments require shared auth/session storage for consistency).
+- Terraform/CI manages only the Secrets Manager secret container; the secret value is intended to be created and rotated manually in AWS.

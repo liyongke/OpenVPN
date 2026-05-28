@@ -3,10 +3,12 @@ import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip } from "react-lea
 import {
   getBackendMonitoring,
   getControlFeatures,
+  getStoredControlToken,
   getMapSessions,
   loginControl,
   logoutControl,
   runControlAction,
+  setStoredControlToken,
 } from "../api/client";
 import "leaflet/dist/leaflet.css";
 
@@ -42,7 +44,7 @@ const DEFAULT_MAP = {
 
 export function ControlPage() {
   const [features, setFeatures] = useState(DEFAULT_FEATURES);
-  const [controlToken, setControlToken] = useState("");
+  const [controlToken, setControlToken] = useState(() => getStoredControlToken());
   const [authOpen, setAuthOpen] = useState(false);
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -209,6 +211,7 @@ export function ControlPage() {
         throw new Error("Control login returned empty session token");
       }
       setControlToken(issuedToken);
+      setStoredControlToken(issuedToken);
       setAuthOpen(false);
       setAuthPassword("");
       setAuthMessage("Control pane unlocked");
@@ -228,6 +231,7 @@ export function ControlPage() {
       // Ignore logout errors and clear local session anyway.
     } finally {
       setControlToken("");
+      setStoredControlToken("");
       setAuthBusy(false);
       setAuthMessage("Control pane locked");
     }
@@ -302,38 +306,6 @@ export function ControlPage() {
 
         <article className="control-card">
           <h3>Actions</h3>
-          <div className="control-token-panel" aria-label="Control token section">
-            <label className="control-label" htmlFor="control-token-input">
-              Control Token
-            </label>
-            <input
-              id="control-token-input"
-              className="control-input"
-              type="password"
-              autoComplete="off"
-              placeholder="Paste session token or legacy token"
-              value={controlToken}
-              onChange={(event) => setControlToken(event.target.value)}
-            />
-            <div className="control-auth-actions">
-              <button
-                type="button"
-                className="control-button"
-                onClick={() => setAuthOpen(true)}
-              >
-                Open Auth Popup
-              </button>
-              <button
-                type="button"
-                className="control-button"
-                disabled={!controlToken.trim()}
-                onClick={logout}
-              >
-                Clear Token
-              </button>
-            </div>
-            <p className="hint">In auth mode, login fills this token automatically. In legacy mode, paste the configured token.</p>
-          </div>
           <div className="control-actions">
             <button
               type="button"
@@ -365,6 +337,34 @@ export function ControlPage() {
               {showAuthOptional ? "Control API is in legacy mode and currently disabled by backend feature flag." : "Use the lock icon to authenticate and unlock control actions."}
             </p>
           ) : null}
+          <div className="control-token-panel" aria-label="Control token section">
+            <div className="control-token-panel-head">
+              <div>
+                <h4>Session Token</h4>
+                <p className="hint">Filled automatically after login. You can also paste a legacy token here when auth is optional.</p>
+              </div>
+              <button
+                type="button"
+                className="control-button control-token-clear"
+                disabled={!controlToken.trim()}
+                onClick={logout}
+              >
+                Clear
+              </button>
+            </div>
+            <label className="control-label" htmlFor="control-token-input">
+              Control Token
+            </label>
+            <input
+              id="control-token-input"
+              className="control-input"
+              type="password"
+              autoComplete="off"
+              placeholder="Paste session token or legacy token"
+              value={controlToken}
+              onChange={(event) => setControlToken(event.target.value)}
+            />
+          </div>
           {result ? <p className="control-result">{result}</p> : null}
         </article>
 

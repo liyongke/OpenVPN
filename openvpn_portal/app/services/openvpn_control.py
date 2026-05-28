@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 import socket
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,12 +24,12 @@ class OpenVPNControlService:
     def __init__(self, settings: OpenVPNControlSettings) -> None:
         self._settings = settings
 
-    def terminate_session(self, session: dict[str, Any]) -> dict[str, str]:
+    def terminate_session(self, session: dict[str, Any]) -> dict[str, Any]:
         if self._settings.terminate_command:
             return self._terminate_with_command(session)
         return self._terminate_with_management_socket(session)
 
-    def _terminate_with_command(self, session: dict[str, Any]) -> dict[str, str]:
+    def _terminate_with_command(self, session: dict[str, Any]) -> dict[str, Any]:
         template_values = {
             "username": str(session.get("username", "")),
             "common_name": str(session.get("common_name", "")),
@@ -47,6 +48,7 @@ class OpenVPNControlService:
         if not argv:
             raise SessionTerminationError("Terminate command is empty after rendering")
 
+        started = time.perf_counter()
         try:
             completed = subprocess.run(
                 argv,
@@ -65,9 +67,10 @@ class OpenVPNControlService:
         return {
             "method": "command",
             "result": output or "command-completed",
+            "latency_ms": round((time.perf_counter() - started) * 1000.0, 3),
         }
 
-    def _terminate_with_management_socket(self, session: dict[str, Any]) -> dict[str, str]:
+    def _terminate_with_management_socket(self, session: dict[str, Any]) -> dict[str, Any]:
         protocol = str(session.get("protocol", "")).strip().lower()
         socket_path = self._resolve_socket_path(protocol)
         if not socket_path:
@@ -94,6 +97,7 @@ class OpenVPNControlService:
 
         timeout = max(1.0, self._settings.management_timeout_seconds)
         success_line = ""
+        started = time.perf_counter()
 
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
@@ -118,6 +122,7 @@ class OpenVPNControlService:
         return {
             "method": "management_socket",
             "result": success_line,
+            "latency_ms": round((time.perf_counter() - started) * 1000.0, 3),
         }
 
     def _resolve_socket_path(self, protocol: str) -> str:

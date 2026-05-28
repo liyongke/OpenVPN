@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from collections import deque
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -57,6 +58,84 @@ control_auth_service = ControlAuthService(
     )
 )
 _last_terminate_request_monotonic = 0.0
+_control_latency_samples: deque[dict] = deque(maxlen=500)
+
+
+def _record_control_latency(
+    *,
+    protocol: str,
+    method: str,
+    latency_ms: float,
+    success: bool,
+    error: str = "",
+) -> None:
+    _control_latency_samples.append(
+        {
+            "timestamp": time.time(),
+            "protocol": str(protocol or "unknown").strip().lower() or "unknown",
+            "method": str(method or "unknown").strip().lower() or "unknown",
+            "latency_ms": round(max(0.0, float(latency_ms)), 3),
+            "success": bool(success),
+            "error": str(error or "").strip(),
+        }
+    )
+
+
+def _percentile(values: list[float], ratio: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = int(max(0, min(len(ordered) - 1, round((len(ordered) - 1) * ratio))))
+    return round(ordered[index], 3)
+
+
+def _control_latency_snapshot(window_seconds: int = 300) -> dict:
+    now_ts = time.time()
+    cutoff = now_ts - max(10, int(window_seconds))
+    in_window = [sample for sample in list(_control_latency_samples) if float(sample.get("timestamp", 0.0)) >= cutoff]
+
+    def summarize(samples: list[dict]) -> dict:
+        if not samples:
+            return {
+                "samples": 0,
+                "failures": 0,
+                "failure_rate": 0.0,
+                "last_latency_ms": 0.0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+            }
+
+        latencies = [float(s.get("latency_ms", 0.0)) for s in samples]
+        failures = sum(1 for s in samples if not bool(s.get("success", False)))
+        return {
+            "samples": len(samples),
+            "failures": failures,
+            "failure_rate": round(failures / len(samples), 4),
+            "last_latency_ms": round(latencies[-1], 3),
+            "p50_latency_ms": _percentile(latencies, 0.5),
+            "p95_latency_ms": _percentile(latencies, 0.95),
+        }
+
+    by_protocol: dict[str, list[dict]] = {}
+    for sample in in_window:
+        proto = str(sample.get("protocol", "unknown")).strip().lower() or "unknown"
+        by_protocol.setdefault(proto, []).append(sample)
+
+    return {
+        "window_seconds": max(10, int(window_seconds)),
+        "overall": summarize(in_window),
+        "protocols": {protocol: summarize(samples) for protocol, samples in by_protocol.items()},
+        "latest_errors": [
+            {
+                "protocol": sample.get("protocol", "unknown"),
+                "method": sample.get("method", "unknown"),
+                "latency_ms": sample.get("latency_ms", 0.0),
+                "error": sample.get("error", ""),
+            }
+            for sample in reversed(in_window)
+            if not bool(sample.get("success", False))
+        ][:5],
+    }
 
 base_dir = Path(__file__).resolve().parent
 project_root = base_dir.parent.parent
@@ -87,6 +166,12 @@ frontend_index_file = frontend_assets_dir / "index.html"
 
 class ControlActionRequest(BaseModel):
     action: str
+    target_username: str | None = None
+    target_common_name: str | None = None
+    target_real_address: str | None = None
+    target_virtual_address: str | None = None
+    target_protocol: str | None = None
+    target_client_id: int | None = None
 
 
 class ControlAuthLoginRequest(BaseModel):
@@ -110,6 +195,42 @@ def _client_identity(request: Request, x_forwarded_for: str | None) -> str:
     if request.client and request.client.host:
         return request.client.host
     return "unknown"
+
+
+def _resolve_target_session(body: ControlActionRequest, sessions: list[dict]) -> dict:
+    if not sessions:
+        raise HTTPException(status_code=404, detail="No active sessions available to terminate")
+
+    has_explicit_target = any(
+        value not in (None, "")
+        for value in (
+            body.target_username,
+            body.target_common_name,
+            body.target_real_address,
+            body.target_virtual_address,
+            body.target_protocol,
+            body.target_client_id,
+        )
+    )
+    if not has_explicit_target:
+        return sessions[0]
+
+    for session in sessions:
+        if body.target_client_id is not None and session.get("client_id") != body.target_client_id:
+            continue
+        if body.target_protocol and str(session.get("protocol", "")) != body.target_protocol:
+            continue
+        if body.target_real_address and str(session.get("real_address", "")) != body.target_real_address:
+            continue
+        if body.target_virtual_address and str(session.get("virtual_address", "")) != body.target_virtual_address:
+            continue
+        if body.target_common_name and str(session.get("common_name", "")) != body.target_common_name:
+            continue
+        if body.target_username and str(session.get("username", "")) != body.target_username:
+            continue
+        return session
+
+    raise HTTPException(status_code=404, detail="Target session is no longer active")
 
 
 def _seconds_since_iso(value: str) -> float | None:
@@ -190,11 +311,96 @@ def _read_status_file_context(file_path: str | None = None, lines: int = 400) ->
     except (PermissionError, OSError) as exc:
         read_error = f"Unable to read status file: {exc}"
 
+    status_sources_value = payload.get("status_sources", [])
+    status_sources = status_sources_value if isinstance(status_sources_value, list) else []
+    parse_sources_map: dict[str, dict] = {}
+    parse_diagnostics_value = payload.get("parse_diagnostics", {})
+    parse_diagnostics = parse_diagnostics_value if isinstance(parse_diagnostics_value, dict) else {}
+    parse_sources_value = parse_diagnostics.get("sources", [])
+    parse_sources = parse_sources_value if isinstance(parse_sources_value, list) else []
+    for source_parse in parse_sources:
+        if not isinstance(source_parse, dict):
+            continue
+        source_path = str(source_parse.get("path", "")).strip()
+        if source_path:
+            parse_sources_map[source_path] = source_parse
+
+    now_utc = datetime.now(timezone.utc)
+
+    status_sources_enriched: list[dict] = []
+    for source in status_sources:
+        enriched = dict(source) if isinstance(source, dict) else {}
+        source_path = str(enriched.get("path", "")).strip()
+        freshness_seconds = None
+        observed_updated_at = ""
+        if source_path:
+            try:
+                stat = Path(source_path).stat()
+                observed_dt = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+                observed_updated_at = observed_dt.isoformat()
+                freshness_seconds = round(max(0.0, (now_utc - observed_dt).total_seconds()), 3)
+            except OSError:
+                pass
+
+        enriched["observed_updated_at"] = observed_updated_at
+        enriched["freshness_seconds"] = freshness_seconds
+        enriched["parse_diagnostics"] = parse_sources_map.get(source_path, {})
+        enriched["parse_error_count"] = int(enriched.get("parse_diagnostics", {}).get("client_rows_skipped", 0))
+        status_sources_enriched.append(enriched)
+
+    source_entry = next((s for s in status_sources_enriched if str(s.get("path", "")).strip() == selected), {})
+    source_parse_diagnostics = source_entry.get("parse_diagnostics", {}) if isinstance(source_entry, dict) else {}
+
+    sessions_value = payload.get("sessions", [])
+    sessions = sessions_value if isinstance(sessions_value, list) else []
+    source_sessions = [s for s in sessions if str(s.get("source_file", "")).strip() == selected]
+
+    trusted_count = sum(1 for s in source_sessions if bool(s.get("trusted_session", False)))
+    suspect_count = max(0, len(source_sessions) - trusted_count)
+    source_summary = {
+        "session_count": len(source_sessions),
+        "trusted_count": trusted_count,
+        "suspect_count": suspect_count,
+        "protocol": str(source_entry.get("protocol", "unknown") or "unknown"),
+    }
+
+    inference_counts: dict[str, int] = {}
+    for session in source_sessions:
+        key = str(session.get("device_inference_source", "fallback:unknown")).strip() or "fallback:unknown"
+        inference_counts[key] = inference_counts.get(key, 0) + 1
+
+    hint_file_info = {
+        "path": settings.device_hints_file,
+        "exists": False,
+        "size_bytes": 0,
+        "updated_at": "",
+    }
+    if settings.device_hints_file:
+        hint_path = Path(settings.device_hints_file)
+        try:
+            hint_stat = hint_path.stat()
+            hint_file_info = {
+                "path": str(hint_path),
+                "exists": True,
+                "size_bytes": int(hint_stat.st_size),
+                "updated_at": datetime.fromtimestamp(hint_stat.st_mtime, tz=timezone.utc).isoformat(),
+            }
+        except OSError:
+            pass
+
     return {
         "title": settings.title,
         "status_file": selected,
         "read_error": read_error,
         "raw_text": raw_text,
+        "source_entry": source_entry,
+        "source_parse_diagnostics": source_parse_diagnostics,
+        "source_sessions": source_sessions,
+        "source_summary": source_summary,
+        "source_device_inference_counts": inference_counts,
+        "device_hints_file": hint_file_info,
+        "status_sources": status_sources_enriched,
+        "all_sessions": sessions,
         "payload": payload,
     }
 
@@ -402,14 +608,27 @@ async def api_control_actions(
 
         sessions_value = collector.latest_payload.get("sessions", [])
         sessions = sessions_value if isinstance(sessions_value, list) else []
-        if not sessions:
-            raise HTTPException(status_code=404, detail="No active sessions available to terminate")
-
-        target = sessions[0]
+        target = _resolve_target_session(body, sessions)
+        protocol = str(target.get("protocol", "unknown") or "unknown")
+        terminate_started = time.perf_counter()
         try:
             terminate_result = await asyncio.to_thread(control_service.terminate_session, target)
         except SessionTerminationError as exc:
+            _record_control_latency(
+                protocol=protocol,
+                method="unknown",
+                latency_ms=(time.perf_counter() - terminate_started) * 1000.0,
+                success=False,
+                error=str(exc),
+            )
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        _record_control_latency(
+            protocol=protocol,
+            method=str(terminate_result.get("method", "unknown")),
+            latency_ms=(time.perf_counter() - terminate_started) * 1000.0,
+            success=True,
+        )
 
         _last_terminate_request_monotonic = now_monotonic
 
@@ -429,7 +648,8 @@ async def api_control_actions(
                 },
                 "method": terminate_result.get("method", "unknown"),
                 "result": terminate_result.get("result", ""),
-                "message": "Head session termination requested",
+                "latency_ms": terminate_result.get("latency_ms", 0.0),
+                "message": "Session termination requested",
                 "generated_at": collector.latest_payload.get("generated_at", ""),
             }
         )
@@ -557,6 +777,11 @@ def api_history_7d() -> JSONResponse:
     )
 
 
+@app.get("/api/control/latency")
+def api_control_latency(window_seconds: int = Query(default=300, ge=10, le=3600)) -> JSONResponse:
+    return JSONResponse(_control_latency_snapshot(window_seconds=window_seconds))
+
+
 @app.get("/api/live/sessions")
 async def api_live_sessions() -> StreamingResponse:
     queue = await collector.subscribe()
@@ -576,6 +801,7 @@ async def api_live_sessions() -> StreamingResponse:
 def api_status_file(file: str | None = Query(default=None), lines: int = Query(default=400)) -> JSONResponse:
     context = _read_status_file_context(file_path=file, lines=lines)
     payload = context["payload"]
+    diagnostics = payload.get("diagnostics", {}) if isinstance(payload.get("diagnostics", {}), dict) else {}
     return JSONResponse(
         {
             "status_file": context["status_file"],
@@ -584,7 +810,16 @@ def api_status_file(file: str | None = Query(default=None), lines: int = Query(d
             "status_exists": payload.get("status_exists", False),
             "updated_at": payload.get("updated_at", ""),
             "generated_at": payload.get("generated_at", ""),
-            "status_sources": payload.get("status_sources", []),
+            "status_sources": context.get("status_sources", []),
+            "source_entry": context.get("source_entry", {}),
+            "source_summary": context.get("source_summary", {}),
+            "source_parse_diagnostics": context.get("source_parse_diagnostics", {}),
+            "source_sessions": context.get("source_sessions", []),
+            "source_device_inference_counts": context.get("source_device_inference_counts", {}),
+            "sessions": context.get("all_sessions", []),
+            "device_hints_file": context.get("device_hints_file", {}),
+            "diagnostics": diagnostics,
+            "parse_diagnostics": payload.get("parse_diagnostics", {}),
         }
     )
 

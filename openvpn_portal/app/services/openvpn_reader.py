@@ -24,6 +24,7 @@ class ClientSession:
     source_file: str
     device_type: str
     device_platform: str
+    device_inference_source: str
     client_id: int | None
 
 
@@ -122,7 +123,7 @@ def _apply_device_hints(
     real_address: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
     allow_real_ip_hint: bool = True,
-) -> tuple[str, str] | None:
+) -> tuple[tuple[str, str], str] | None:
     users = device_hints.get("users", {})
     common_names = device_hints.get("common_names", {})
     real_addresses = device_hints.get("real_addresses", {})
@@ -130,21 +131,21 @@ def _apply_device_hints(
 
     endpoint_key = real_address.strip().lower()
     if endpoint_key in real_endpoints:
-        return real_endpoints[endpoint_key]
+        return real_endpoints[endpoint_key], "hint:real_endpoint"
 
     # Real IP hints can collide when multiple clients are behind one NAT.
     if allow_real_ip_hint:
         ip_key = real_address.strip().lower().split(":", 1)[0]
         if ip_key in real_addresses:
-            return real_addresses[ip_key]
+            return real_addresses[ip_key], "hint:real_address"
 
     user_key = username.strip().lower()
     if user_key in users:
-        return users[user_key]
+        return users[user_key], "hint:user"
 
     cn_key = common_name.strip().lower()
     if cn_key in common_names:
-        return common_names[cn_key]
+        return common_names[cn_key], "hint:common_name"
 
     return None
 
@@ -155,7 +156,7 @@ def _infer_device(
     real_address: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
     allow_real_ip_hint: bool = True,
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     hinted = _apply_device_hints(
         username,
         common_name,
@@ -164,27 +165,28 @@ def _infer_device(
         allow_real_ip_hint=allow_real_ip_hint,
     )
     if hinted:
-        return hinted
+        (device_type, device_platform), inference_source = hinted
+        return device_type, device_platform, inference_source
 
     text = f"{username} {common_name}".lower()
 
     if any(token in text for token in ["ios", "iphone", "ipad", "android", "phone", "mobile"]):
         if "ios" in text or "iphone" in text or "ipad" in text:
-            return "phone", "ios"
+            return "phone", "ios", "heuristic:identity_text"
         if "android" in text:
-            return "phone", "android"
-        return "phone", "unknown"
+            return "phone", "android", "heuristic:identity_text"
+        return "phone", "unknown", "heuristic:identity_text"
 
     if any(token in text for token in ["windows", "win", "mac", "linux", "desktop", "laptop", "pc"]):
         if "windows" in text or " win" in text:
-            return "pc", "windows"
+            return "pc", "windows", "heuristic:identity_text"
         if "mac" in text:
-            return "pc", "mac"
+            return "pc", "mac", "heuristic:identity_text"
         if "linux" in text:
-            return "pc", "linux"
-        return "pc", "unknown"
+            return "pc", "linux", "heuristic:identity_text"
+        return "pc", "unknown", "heuristic:identity_text"
 
-    return "unknown", "unknown"
+    return "unknown", "unknown", "fallback:unknown"
 
 
 def _minutes_since_epoch(epoch_value: int) -> int | None:
@@ -202,20 +204,39 @@ def _split_status_fields(line: str) -> list[str]:
     return [part.strip() for part in line.split(",")]
 
 
+def _empty_parse_diagnostics(parse_mode: str = "none") -> dict[str, Any]:
+    return {
+        "parse_mode": parse_mode,
+        "line_count_total": 0,
+        "client_rows_seen": 0,
+        "client_rows_parsed": 0,
+        "client_rows_skipped": 0,
+        "skip_reasons": {},
+    }
+
+
 def _parse_csv_status(
     lines: list[str],
     protocol: str,
     source_file: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
-) -> tuple[list[ClientSession], str]:
+) -> tuple[list[ClientSession], str, dict[str, Any]]:
     sessions: list[ClientSession] = []
     updated_at = ""
     ip_occurrences: dict[str, int] = {}
+    client_rows_seen = 0
+    client_rows_parsed = 0
+    skip_reasons: dict[str, int] = {}
+
+    def mark_skip(reason: str) -> None:
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     for raw in lines:
         line = raw.strip()
         if not (line.startswith("CLIENT_LIST,") or line.startswith("CLIENT_LIST\t")):
             continue
+
+        client_rows_seen += 1
 
         parts = _split_status_fields(line)
         if len(parts) < 3:
@@ -244,10 +265,14 @@ def _parse_csv_status(
         # CLIENT_LIST,Common Name,Real Address,Virtual Address,Virtual IPv6 Address,
         # Bytes Received,Bytes Sent,Connected Since,Connected Since (time_t),Username,...
         if len(parts) < 10:
+            mark_skip("short_row")
             continue
 
         common_name = parts[1]
         real_address = parts[2]
+        if not real_address.strip():
+            mark_skip("missing_real_address")
+            continue
         virtual_address = parts[3]
         bytes_received = _safe_int(parts[5])
         bytes_sent = _safe_int(parts[6])
@@ -261,7 +286,7 @@ def _parse_csv_status(
 
         real_ip = real_address.strip().lower().split(":", 1)[0]
         allow_real_ip_hint = ip_occurrences.get(real_ip, 0) <= 1
-        device_type, device_platform = _infer_device(
+        device_type, device_platform, device_inference_source = _infer_device(
             username,
             common_name,
             real_address,
@@ -283,11 +308,24 @@ def _parse_csv_status(
                 source_file=source_file,
                 device_type=device_type,
                 device_platform=device_platform,
+                device_inference_source=device_inference_source,
                 client_id=client_id_value,
             )
         )
+        client_rows_parsed += 1
 
-    return sessions, updated_at
+    return (
+        sessions,
+        updated_at,
+        {
+            "parse_mode": "csv_v3",
+            "line_count_total": len(lines),
+            "client_rows_seen": client_rows_seen,
+            "client_rows_parsed": client_rows_parsed,
+            "client_rows_skipped": max(0, client_rows_seen - client_rows_parsed),
+            "skip_reasons": skip_reasons,
+        },
+    )
 
 
 def _parse_legacy_status(
@@ -295,10 +333,16 @@ def _parse_legacy_status(
     protocol: str,
     source_file: str,
     device_hints: dict[str, dict[str, tuple[str, str]]],
-) -> tuple[list[ClientSession], str]:
+) -> tuple[list[ClientSession], str, dict[str, Any]]:
     sessions: list[ClientSession] = []
     updated_at = ""
     ip_occurrences: dict[str, int] = {}
+    client_rows_seen = 0
+    client_rows_parsed = 0
+    skip_reasons: dict[str, int] = {}
+
+    def mark_skip(reason: str) -> None:
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     for raw in lines:
         line = raw.strip()
@@ -344,17 +388,22 @@ def _parse_legacy_status(
             continue
 
         parts = line.split(",")
+        client_rows_seen += 1
         if len(parts) < 5:
+            mark_skip("short_row")
             continue
 
         common_name = parts[0]
         real_address = parts[1]
+        if not real_address.strip():
+            mark_skip("missing_real_address")
+            continue
         bytes_received = _safe_int(parts[2])
         bytes_sent = _safe_int(parts[3])
         connected_since = parts[4]
         real_ip = real_address.strip().lower().split(":", 1)[0]
         allow_real_ip_hint = ip_occurrences.get(real_ip, 0) <= 1
-        device_type, device_platform = _infer_device(
+        device_type, device_platform, device_inference_source = _infer_device(
             common_name,
             common_name,
             real_address,
@@ -376,11 +425,24 @@ def _parse_legacy_status(
                 source_file=source_file,
                 device_type=device_type,
                 device_platform=device_platform,
+                device_inference_source=device_inference_source,
                 client_id=None,
             )
         )
+        client_rows_parsed += 1
 
-    return sessions, updated_at
+    return (
+        sessions,
+        updated_at,
+        {
+            "parse_mode": "legacy",
+            "line_count_total": len(lines),
+            "client_rows_seen": client_rows_seen,
+            "client_rows_parsed": client_rows_parsed,
+            "client_rows_skipped": max(0, client_rows_seen - client_rows_parsed),
+            "skip_reasons": skip_reasons,
+        },
+    )
 
 
 def _fmt_mib(value_bytes: int) -> float:
@@ -566,6 +628,69 @@ def _summarize_sessions(sessions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _build_diagnostics(sessions: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for session in sessions:
+        identity = _session_identity(
+            str(session.get("username", "")),
+            str(session.get("common_name", "")),
+        ).strip()
+        if not identity or identity.lower() in {"undef", "unknown", "anonymous"}:
+            continue
+
+        entry = grouped.setdefault(
+            identity.lower(),
+            {
+                "identity": identity,
+                "usernames": set(),
+                "common_names": set(),
+                "protocols": set(),
+                "real_addresses": set(),
+                "virtual_addresses": set(),
+                "source_files": set(),
+                "session_count": 0,
+            },
+        )
+        entry["session_count"] += 1
+        entry["usernames"].add(str(session.get("username", "")).strip())
+        entry["common_names"].add(str(session.get("common_name", "")).strip())
+        entry["protocols"].add(str(session.get("protocol", "unknown")).strip() or "unknown")
+        real_address = str(session.get("real_address", "")).strip()
+        virtual_address = str(session.get("virtual_address", "")).strip()
+        source_file = str(session.get("source_file", "")).strip()
+        if real_address:
+            entry["real_addresses"].add(real_address)
+        if virtual_address:
+            entry["virtual_addresses"].add(virtual_address)
+        if source_file:
+            entry["source_files"].add(source_file)
+
+    cross_protocol_duplicates: list[dict[str, Any]] = []
+    for entry in grouped.values():
+        if len(entry["protocols"]) <= 1:
+            continue
+        cross_protocol_duplicates.append(
+            {
+                "identity": entry["identity"],
+                "session_count": entry["session_count"],
+                "protocols": sorted(entry["protocols"]),
+                "usernames": sorted(value for value in entry["usernames"] if value),
+                "common_names": sorted(value for value in entry["common_names"] if value),
+                "real_addresses": sorted(entry["real_addresses"]),
+                "virtual_addresses": sorted(entry["virtual_addresses"]),
+                "source_files": sorted(entry["source_files"]),
+            }
+        )
+
+    cross_protocol_duplicates.sort(key=lambda item: (-int(item["session_count"]), str(item["identity"])))
+
+    return {
+        "cross_protocol_duplicate_count": len(cross_protocol_duplicates),
+        "cross_protocol_duplicates": cross_protocol_duplicates[:12],
+    }
+
+
 def load_openvpn_status(
     status_file: str,
     device_hints: dict[str, dict[str, tuple[str, str]]] | None = None,
@@ -595,6 +720,7 @@ def load_openvpn_status(
             "updated_at": "",
             "sessions": [],
             "summary": _empty_summary(),
+            "parse_diagnostics": _empty_parse_diagnostics(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -616,13 +742,24 @@ def load_openvpn_status(
             "updated_at": "",
             "sessions": [],
             "summary": _empty_summary(),
+            "parse_diagnostics": _empty_parse_diagnostics(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     if any(line.startswith("CLIENT_LIST,") or line.startswith("CLIENT_LIST\t") for line in lines):
-        sessions, updated_at = _parse_csv_status(lines, protocol=protocol, source_file=str(path), device_hints=hints)
+        sessions, updated_at, parse_diagnostics = _parse_csv_status(
+            lines,
+            protocol=protocol,
+            source_file=str(path),
+            device_hints=hints,
+        )
     else:
-        sessions, updated_at = _parse_legacy_status(lines, protocol=protocol, source_file=str(path), device_hints=hints)
+        sessions, updated_at, parse_diagnostics = _parse_legacy_status(
+            lines,
+            protocol=protocol,
+            source_file=str(path),
+            device_hints=hints,
+        )
 
     session_dicts: list[dict[str, Any]] = []
     for s in sessions:
@@ -651,6 +788,7 @@ def load_openvpn_status(
                 "source_file": s.source_file,
                 "device_type": s.device_type,
                 "device_platform": s.device_platform,
+                "device_inference_source": s.device_inference_source,
                 "client_id": s.client_id,
                 "trusted_session": trusted,
                 "audit_class": "trusted" if trusted else "suspect",
@@ -659,6 +797,7 @@ def load_openvpn_status(
         )
 
     summary = _summarize_sessions(session_dicts)
+    diagnostics = _build_diagnostics(session_dicts)
 
     return {
         "status_file": str(path),
@@ -669,12 +808,15 @@ def load_openvpn_status(
                 "exists": True,
                 "session_count": len(session_dicts),
                 "updated_at": updated_at,
+                "parse_error_count": int(parse_diagnostics.get("client_rows_skipped", 0)),
             }
         ],
         "status_exists": True,
         "updated_at": updated_at,
         "sessions": session_dicts,
         "summary": summary,
+        "diagnostics": diagnostics,
+        "parse_diagnostics": parse_diagnostics,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -714,6 +856,17 @@ def load_openvpn_status_multi(status_files: list[str], device_hints_file: str = 
         normalized_sessions.append(normalized)
 
     summary = _summarize_sessions(normalized_sessions)
+    diagnostics = _build_diagnostics(normalized_sessions)
+
+    parse_diagnostics_sources: list[dict[str, Any]] = []
+    for payload in per_source_payloads:
+        source_path = str(payload.get("status_file", ""))
+        source_parse_value = payload.get("parse_diagnostics", {})
+        source_parse = source_parse_value if isinstance(source_parse_value, dict) else _empty_parse_diagnostics()
+        parse_diagnostics_sources.append({
+            "path": source_path,
+            **source_parse,
+        })
 
     existing_sources = [s for s in status_sources if s.get("exists")]
     updated_candidates = [str(s.get("updated_at", "")) for s in existing_sources if str(s.get("updated_at", ""))]
@@ -725,5 +878,7 @@ def load_openvpn_status_multi(status_files: list[str], device_hints_file: str = 
         "updated_at": updated_candidates[0] if updated_candidates else "",
         "sessions": normalized_sessions,
         "summary": summary,
+        "diagnostics": diagnostics,
+        "parse_diagnostics": {"sources": parse_diagnostics_sources},
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

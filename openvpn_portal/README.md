@@ -135,7 +135,7 @@ Environment variables:
 - PORTAL_GEOIP_DB_PATH default: empty (when set, use local GeoLite2 DB first and fall back to ipwho.is)
 - PORTAL_TITLE default: OpenVPN Portal Phase 2 (Read-Only Ops)
 - PORTAL_CONTROL_ALLOWED_ACTIONS default: refresh_snapshot,sample_history,terminate_head_session
-- PORTAL_CONTROL_AUTH_USERNAME default: empty (when set with password, enables session auth mode)
+- PORTAL_CONTROL_AUTH_USERNAME default: empty (env fallback when secret-backed auth is not used)
 - PORTAL_CONTROL_AUTH_PASSWORD default: empty
 - PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (preferred; format `pbkdf2_sha256$iterations$salt_b64$digest_b64`)
 - PORTAL_CONTROL_AUTH_SECRET_ID default: empty (when set, auth credentials are loaded from AWS Secrets Manager)
@@ -156,18 +156,27 @@ Environment variables:
 
 Control auth defaults:
 - There is no built-in default username/password. Both values default to empty.
-- Session auth mode is enabled when `PORTAL_CONTROL_AUTH_USERNAME` is set and either `PORTAL_CONTROL_AUTH_PASSWORD` or `PORTAL_CONTROL_AUTH_PASSWORD_HASH` is set.
+- Session auth mode is enabled when username plus password or password-hash are available, either from env vars or from the configured secret.
 - Hash mode is preferred over plaintext password mode.
 - If `PORTAL_CONTROL_AUTH_SECRET_ID` is set, secret values override auth username/password/password-hash env vars.
 
 Secret storage guidance:
 - Local development: keep control auth credentials in `openvpn_portal/.env` (do not commit).
-- EC2 service mode: keep credentials in deploy-managed `.env.tcp` / `.env.udp` with restricted file permissions.
-- CI/CD: pass credentials through secret references only (for example `${{ secrets.PORTAL_CONTROL_AUTH_USERNAME }}` and `${{ secrets.PORTAL_CONTROL_AUTH_PASSWORD }}`).
+- EC2 service mode: deploy-managed `.env.tcp` / `.env.udp` should carry only `PORTAL_CONTROL_AUTH_SECRET_ID`; store actual credentials in AWS Secrets Manager.
+- CI/CD: pass only the secret identifier (`${{ secrets.PORTAL_CONTROL_AUTH_SECRET_ID }}`) into deployment; keep credential values in AWS Secrets Manager.
 - Recommended production mode: set `PORTAL_CONTROL_AUTH_SECRET_ID` and store auth payload in AWS Secrets Manager JSON:
    - `username`
    - `password_hash` (preferred)
    - `password` (legacy fallback)
+
+Recommended secret JSON:
+
+```json
+{
+   "username": "<portal-control-user>",
+   "password_hash": "pbkdf2_sha256$<iterations>$<salt_b64>$<digest_b64>"
+}
+```
 
 Generate a PBKDF2 auth hash (recommended):
 
