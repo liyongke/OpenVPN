@@ -436,6 +436,8 @@ jobs:
           PORTAL_TITLE=VPN Portal
           OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
           PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+          AWS_REGION=${AWS_REGION}
+          PORTAL_CONTROL_AUTH_SECRET_REGION=${AWS_REGION}
           ENV_TCP
           if [[ -n "$AUTH_SECRET_ID" ]]; then
             printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.tcp"
@@ -448,6 +450,8 @@ jobs:
           PORTAL_TITLE=VPN Portal
           OPENVPN_STATUS_FILES=/var/log/openvpn/status-tcp.log,/var/log/openvpn/status-udp.log
           PORTAL_HISTORY_DB=/home/ec2-user/apps/vpn-portal-phase1-readonly/data/history.sqlite3
+          AWS_REGION=${AWS_REGION}
+          PORTAL_CONTROL_AUTH_SECRET_REGION=${AWS_REGION}
           ENV_UDP
           if [[ -n "$AUTH_SECRET_ID" ]]; then
             printf 'PORTAL_CONTROL_AUTH_SECRET_ID=%s\n' "$AUTH_SECRET_ID" >> "$APP_DIR/.env.udp"

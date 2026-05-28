@@ -205,7 +205,7 @@ def load_settings() -> Settings:
     control_auth_password_hash = ""
     control_auth_secret_id = os.getenv("PORTAL_CONTROL_AUTH_SECRET_ID", "openvpn/portal/control-auth").strip()
     control_auth_secret_region = os.getenv(
-        "PORTAL_CONTROL_AUTH_SECRET_REGION", os.getenv("AWS_REGION", "")
+        "PORTAL_CONTROL_AUTH_SECRET_REGION", os.getenv("AWS_REGION", "ap-southeast-1")
     ).strip()
     control_auth_source = "secret"
     control_auth_local_file = os.getenv(

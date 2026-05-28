@@ -140,7 +140,7 @@ Environment variables:
 - PORTAL_CONTROL_AUTH_PASSWORD default: empty (ignored in strict secret-backed mode)
 - PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (ignored in strict secret-backed mode)
 - PORTAL_CONTROL_AUTH_SECRET_ID default: openvpn/portal/control-auth
-- PORTAL_CONTROL_AUTH_SECRET_REGION default: AWS_REGION (optional explicit override for secret lookup)
+- PORTAL_CONTROL_AUTH_SECRET_REGION default: AWS_REGION, fallback `ap-southeast-1` (optional explicit override for secret lookup)
 - PORTAL_CONTROL_AUTH_SOURCE default: auto (`auto|secret|local_file`)
 - PORTAL_CONTROL_AUTH_LOCAL_FILE default: clients/portal_credentials.txt
 - PORTAL_LOCAL_RUN default: false (set true to force local-file mode)
