@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,8 @@ class Settings:
     control_auth_password_hash: str
     control_auth_secret_id: str
     control_auth_secret_region: str
+    control_auth_source: str
+    control_auth_local_file: str
     control_auth_session_ttl_seconds: int
     control_auth_max_sessions: int
     control_auth_max_failed_attempts: int
@@ -159,6 +162,38 @@ def _load_control_auth_secret(secret_id: str, region: str = "") -> dict[str, str
     return result
 
 
+def _load_local_control_auth_file(file_path: str) -> dict[str, str]:
+    path = Path((file_path or "").strip()).expanduser()
+    if not path.is_absolute():
+        path = (Path(__file__).resolve().parent.parent.parent / path).resolve()
+
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, raw_value = line.split(":", 1)
+        normalized_key = key.strip().lower()
+        normalized_value = raw_value.strip()
+        if normalized_key in {"username", "password"} and normalized_value:
+            values[normalized_key] = normalized_value
+    return values
+
+
+def _is_local_runtime() -> bool:
+    if _env_flag("PORTAL_LOCAL_RUN", default=False):
+        return True
+    runtime = os.getenv("PORTAL_RUNTIME", "").strip().lower()
+    if runtime in {"local", "dev", "development"}:
+        return True
+    return platform.system().lower() in {"darwin", "windows"}
+
+
 def load_settings() -> Settings:
     status_files = _detect_status_files()
     control_actions = _parse_csv_list(
@@ -172,13 +207,27 @@ def load_settings() -> Settings:
     control_auth_secret_region = os.getenv(
         "PORTAL_CONTROL_AUTH_SECRET_REGION", os.getenv("AWS_REGION", "")
     ).strip()
+    control_auth_source = "secret"
+    control_auth_local_file = os.getenv(
+        "PORTAL_CONTROL_AUTH_LOCAL_FILE",
+        str((Path(__file__).resolve().parent.parent.parent / "clients" / "portal_credentials.txt").resolve()),
+    ).strip()
+    source_mode = os.getenv("PORTAL_CONTROL_AUTH_SOURCE", "auto").strip().lower()
+    if source_mode not in {"auto", "secret", "local_file"}:
+        source_mode = "auto"
 
-    # Control auth is secret-first by default; env user/password values are intentionally
-    # ignored to keep one canonical credential source.
-    secret_values = _load_control_auth_secret(control_auth_secret_id, control_auth_secret_region)
-    control_auth_username = secret_values.get("username", "")
-    control_auth_password = secret_values.get("password", "")
-    control_auth_password_hash = secret_values.get("password_hash", "")
+    if source_mode == "local_file" or (source_mode == "auto" and _is_local_runtime()):
+        local_values = _load_local_control_auth_file(control_auth_local_file)
+        control_auth_source = "local_file"
+        control_auth_username = local_values.get("username", "")
+        control_auth_password = local_values.get("password", "")
+    else:
+        # In non-local runtime, control auth stays secret-first.
+        secret_values = _load_control_auth_secret(control_auth_secret_id, control_auth_secret_region)
+        control_auth_source = "secret"
+        control_auth_username = secret_values.get("username", "")
+        control_auth_password = secret_values.get("password", "")
+        control_auth_password_hash = secret_values.get("password_hash", "")
 
     return Settings(
         host=os.getenv("PORTAL_HOST", "0.0.0.0"),
@@ -210,6 +259,8 @@ def load_settings() -> Settings:
         control_auth_password_hash=control_auth_password_hash,
         control_auth_secret_id=control_auth_secret_id,
         control_auth_secret_region=control_auth_secret_region,
+        control_auth_source=control_auth_source,
+        control_auth_local_file=control_auth_local_file,
         control_auth_session_ttl_seconds=max(60, int(os.getenv("PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS", "3600"))),
         control_auth_max_sessions=max(1, int(os.getenv("PORTAL_CONTROL_AUTH_MAX_SESSIONS", "256"))),
         control_auth_max_failed_attempts=max(2, int(os.getenv("PORTAL_CONTROL_AUTH_MAX_FAILED_ATTEMPTS", "5"))),

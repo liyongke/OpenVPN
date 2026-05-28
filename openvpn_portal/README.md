@@ -70,7 +70,8 @@ Audit/stability note:
 Control API scope note:
 - Optional control actions include `refresh_snapshot`, `sample_history`, and `terminate_head_session`.
 - Control actions require username/password login and issue a short-lived control session token.
-- The control auth backend must be configured through `PORTAL_CONTROL_AUTH_SECRET_ID` (AWS Secrets Manager).
+- Local runtime defaults to credentials from `clients/portal_credentials.txt`.
+- Non-local runtime defaults to `PORTAL_CONTROL_AUTH_SECRET_ID` (AWS Secrets Manager).
 - `terminate_head_session` targets the first row in Active Sessions and requires either:
    - OpenVPN management sockets (`PORTAL_OPENVPN_MANAGEMENT_TCP_SOCKET` / `PORTAL_OPENVPN_MANAGEMENT_UDP_SOCKET`), or
    - a custom terminate command via `PORTAL_CONTROL_TERMINATE_COMMAND`.
@@ -140,6 +141,9 @@ Environment variables:
 - PORTAL_CONTROL_AUTH_PASSWORD_HASH default: empty (ignored in strict secret-backed mode)
 - PORTAL_CONTROL_AUTH_SECRET_ID default: openvpn/portal/control-auth
 - PORTAL_CONTROL_AUTH_SECRET_REGION default: AWS_REGION (optional explicit override for secret lookup)
+- PORTAL_CONTROL_AUTH_SOURCE default: auto (`auto|secret|local_file`)
+- PORTAL_CONTROL_AUTH_LOCAL_FILE default: clients/portal_credentials.txt
+- PORTAL_LOCAL_RUN default: false (set true to force local-file mode)
 - PORTAL_CONTROL_AUTH_SESSION_TTL_SECONDS default: 3600
 - PORTAL_CONTROL_AUTH_MAX_SESSIONS default: 256
 - PORTAL_CONTROL_AUTH_MAX_FAILED_ATTEMPTS default: 5
@@ -156,18 +160,18 @@ Environment variables:
 
 Control auth defaults:
 - There is no built-in default username/password. Both values default to empty.
-- Session auth mode is enabled when the configured secret contains username plus password or password-hash.
-- Hash mode is preferred over plaintext password mode.
-- Secret values are treated as the authority for control auth credentials.
+- Session auth mode is enabled when credentials provide username plus password or password-hash.
+- In `auto` mode, local runtime uses `clients/portal_credentials.txt`; otherwise the backend reads AWS Secrets Manager.
+- If both `password_hash` and `password` exist in the secret, either credential form is accepted.
 
 Secret storage guidance:
-- Local development: keep control auth credentials in `openvpn_portal/.env` (do not commit).
+- Local development: use `clients/portal_credentials.txt` (do not commit real credentials).
 - EC2 service mode: deploy-managed `.env.tcp` / `.env.udp` should carry only `PORTAL_CONTROL_AUTH_SECRET_ID`; store actual credentials in AWS Secrets Manager.
 - CI/CD: pass only the secret identifier (`${{ secrets.PORTAL_CONTROL_AUTH_SECRET_ID }}`) into deployment; keep credential values in AWS Secrets Manager.
-- Recommended production mode: set `PORTAL_CONTROL_AUTH_SECRET_ID` and store auth payload in AWS Secrets Manager JSON:
+- Recommended production mode: set `PORTAL_CONTROL_AUTH_SOURCE=secret`, set `PORTAL_CONTROL_AUTH_SECRET_ID`, and store auth payload in AWS Secrets Manager JSON:
    - `username`
-   - `password_hash` (preferred)
-   - `password` (optional plaintext fallback)
+   - `password_hash` (recommended)
+   - `password` (optional plaintext, and accepted when provided)
 
 Recommended secret JSON:
 

@@ -128,7 +128,11 @@ class ControlAuthService:
     def _verify_password(self, provided_password: str) -> bool:
         encoded = (self._settings.password_hash or "").strip()
         if encoded:
-            return self._verify_pbkdf2_hash(provided_password, encoded)
+            if self._verify_pbkdf2_hash(provided_password, encoded):
+                return True
+            if self._settings.password:
+                return compare_digest(provided_password, self._settings.password)
+            return False
         return compare_digest(provided_password, self._settings.password)
 
     @staticmethod

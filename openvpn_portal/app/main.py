@@ -62,11 +62,19 @@ _control_latency_samples: deque[dict] = deque(maxlen=500)
 
 
 def _control_auth_config_error() -> str:
+    if control_auth_service.enabled:
+        return ""
+
+    if settings.control_auth_source == "local_file":
+        return "Local control auth file is missing required username/password"
+
     if not settings.control_auth_secret_id:
         return "Control auth secret is not configured (set PORTAL_CONTROL_AUTH_SECRET_ID)"
+
     if not control_auth_service.enabled:
         return "Control auth secret is missing required username/password or password_hash"
-    return ""
+
+    return "Control auth is not configured"
 
 
 def _control_auth_available() -> bool:
