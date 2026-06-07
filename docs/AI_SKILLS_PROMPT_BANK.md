@@ -26,6 +26,11 @@ Practical, reusable AI skill packs for OpenVPN operations in this repository.
 - Skill 8 AWS Cost Ops: `openvpn-aws-cost-ops/`
 - Skill 9 Regression Guardrail Extraction: `openvpn-regression-guardrail-extraction/`
 
+## Recent Hardening Updates
+
+- `openvpn-incident-workflow/` now includes a fast branch for "VPN connected but cannot open Google" with read-only proof steps for NAT/forwarding/MSS and rollback-first fix sequencing.
+- `openvpn-regression-guardrail-extraction/` now enforces NAT MASQUERADE presence for `10.8.0.0/24` and `10.9.0.0/24`, NAT persistence checks, and single-`mssfix` validation per server config.
+
 ## Why This Set
 
 This bank intentionally removes overlapping micro-templates and keeps only operationally useful skill packs that cover:
